@@ -36,6 +36,10 @@ class PresentationState(BaseModel):
     design_theme: Optional[str] = None
     metadata: Optional[dict] = None
 
+    # Strict mode fields
+    user_schema: Optional[dict] = None
+    generation_mode: Optional[str] = None  # "strict" | "default" | None
+
     @field_validator("slide_count")
     @classmethod
     def clamp_slide_count(cls, v):

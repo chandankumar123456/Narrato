@@ -1,10 +1,14 @@
 from pipeline.prompt_understanding import parse_prompt
+from pipeline.schema_parser import parse_user_schema
 from pipeline.state_builder import build_state
 from pipeline.state_completion import complete_state
 from pipeline.story_generator import generate_story
 from pipeline.slide_planner import plan_slides
 from pipeline.slide_type_assigner import assign_slide_types
 from pipeline.content_structurer import generate_structured_content
+from pipeline.strict_slide_planner import plan_slides_strict
+from pipeline.strict_content_structurer import generate_strict_content
+from pipeline.content_validator import validate_content
 from pipeline.visual_mapper import generate_visual_queries
 from pipeline.speaker_notes_generator import generate_speaker_notes
 from ppt.generator import generate_ppt
@@ -25,29 +29,61 @@ async def run_pipeline(prompt: str, options: dict = {},
     logger.info(f"[pipeline] Starting for prompt: {prompt[:80]}")
     _report(5)
 
-    signals  = await parse_prompt(prompt)
+    # Stage 1: Parse prompt signals
+    signals = await parse_prompt(prompt)
     signals.update({k: v for k, v in options.items() if v is not None})
+
+    # Stage 1b: Attempt to extract a strict user schema
+    user_schema = await parse_user_schema(prompt)
     _report(15)
 
-    state = build_state(signals)
-    logger.info(f"[pipeline] State built: {state.topic} | {state.slide_count} slides")
+    # Stage 2: Build state (strict or default mode)
+    state = build_state(signals, user_schema=user_schema)
+    logger.info(
+        f"[pipeline] State built: {state.topic} | mode={state.generation_mode} | "
+        f"{state.slide_count} slides"
+    )
     _report(20)
 
-    state = await complete_state(state)
-    _report(25)
+    if state.generation_mode == "strict":
+        # ── Strict pipeline path ──────────────────────────────────
+        logger.info("[pipeline][strict] Using schema-driven pipeline")
 
-    state = await generate_story(state)
-    logger.info(f"[pipeline] Story: {state.story.get('key_message')}")
-    _report(35)
+        # Plan slides deterministically from schema
+        state = plan_slides_strict(state)
+        logger.info(f"[pipeline][strict] Planned {len(state.slide_plan)} slides")
+        _report(40)
 
-    state = plan_slides(state)
-    state = assign_slide_types(state)
-    logger.info(f"[pipeline] Planned {len(state.slide_plan)} slides")
-    _report(40)
+        # Generate content constrained to user-specified fields
+        state = await generate_strict_content(state)
+        _report(55)
 
-    state = await generate_structured_content(state)
-    _report(60)
+        # Validate and retry if needed
+        state = await validate_content(state)
+        logger.info(
+            "[pipeline][strict] Validation: %s",
+            (state.metadata or {}).get("validation_status", "unknown"),
+        )
+        _report(60)
 
+    else:
+        # ── Default pipeline path (unchanged) ─────────────────────
+        state = await complete_state(state)
+        _report(25)
+
+        state = await generate_story(state)
+        logger.info(f"[pipeline] Story: {state.story.get('key_message')}")
+        _report(35)
+
+        state = plan_slides(state)
+        state = assign_slide_types(state)
+        logger.info(f"[pipeline] Planned {len(state.slide_plan)} slides")
+        _report(40)
+
+        state = await generate_structured_content(state)
+        _report(60)
+
+    # ── Shared tail (both paths) ──────────────────────────────────
     state = await generate_visual_queries(state)
     logger.info(f"[pipeline] Content + images ready")
     _report(75)
