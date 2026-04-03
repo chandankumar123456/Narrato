@@ -64,8 +64,10 @@ async def generate_strict_content(state: PresentationState) -> PresentationState
             )
 
         else:
+            else:
             # Fallback for any unexpected type
-            content = {"title": slide.get("purpose", topic), "body": ""}
+            logger.warning("Strict mode: unexpected slide type '%s'", slide_type)
+            content = {"title": slide.get("purpose", topic), "body": "Content pending"}
 
         structured.append({
             "slide_id": slide["slide_id"],

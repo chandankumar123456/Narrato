@@ -16,6 +16,14 @@ MAX_RETRIES = 2
 MAX_WORDS_PER_FIELD = 12
 
 
+def _truncate_to_word_limit(text: str, max_words: int) -> str:
+    """Truncate *text* to at most *max_words* words."""
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words])
+
+
 async def validate_content(state: PresentationState) -> PresentationState:
     """Validate structured_slides against user_schema.
 
@@ -181,9 +189,7 @@ async def _regenerate_failing_slides(
         for field in fields_required:
             val = new_content.get(field, "")
             if isinstance(val, str):
-                words = val.split()
-                if len(words) > MAX_WORDS_PER_FIELD:
-                    new_content[field] = " ".join(words[:MAX_WORDS_PER_FIELD])
+                new_content[field] = _truncate_to_word_limit(val, MAX_WORDS_PER_FIELD)
 
         updated_slides[i] = {**slide, "content": new_content}
 

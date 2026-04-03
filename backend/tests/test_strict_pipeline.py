@@ -146,8 +146,8 @@ class TestStrictState:
     def test_build_state_strict_minimum_slides(self):
         """Even with 1 example the slide count should be clamped to 5."""
         schema = UserSchema(
-            topic="t", examples_required=1,
-            fields_required=["a"], is_structured_request=True,
+            topic="test_topic", examples_required=1,
+            fields_required=["field_a"], is_structured_request=True,
         )
         state = build_state({}, user_schema=schema)
         # 2 + 1 + 1 = 4, clamped to 5 by build_state max()
@@ -312,7 +312,7 @@ class TestContentValidator:
         state = self._make_valid_state()
         slides = list(state.structured_slides)
         bad_content = dict(slides[2]["content"])
-        bad_content["origin"] = " ".join(["word"] * 20)
+        bad_content["origin"] = " ".join(["word"] * (MAX_WORDS_PER_FIELD + 1))
         slides[2] = {**slides[2], "content": bad_content}
         state = state.model_copy(update={"structured_slides": slides})
         errors = _run_checks(state)
