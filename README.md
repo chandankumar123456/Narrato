@@ -1708,3 +1708,223 @@ uv lock
 | `uv sync` fails | Ensure Python ≥3.11 and uv is installed |
 
 ---
+
+## 30. Production Architecture
+
+### State-Driven Pipeline
+
+Narrato uses a **state-driven pipeline** where a single `PresentationState` Pydantic model flows through every stage. Each stage reads the current state, performs its transformation, and returns an updated copy. This guarantees:
+
+- **Reproducibility** — the same state always produces the same output
+- **Testability** — each stage can be tested in isolation
+- **Traceability** — you can inspect the state at any point in the pipeline
+
+The full pipeline executes **10 sequential stages**:
+
+```
+User Prompt
+  → 1. Prompt Understanding  (LLM extracts topic, type, tone, audience)
+  → 2. State Builder          (creates PresentationState from signals)
+  → 3. State Completion        (LLM fills missing fields)
+  → 4. Story Generator         (LLM creates narrative arc + emotional flow)
+  → 5. Slide Planner           (distributes slides across sections by weight)
+  → 6. Slide Type Assigner     (maps each slide to one of 14 layout types)
+  → 7. Content Structurer      (LLM generates typed JSON content per slide)
+  → 8. Visual Mapper           (LLM generates image queries, fetches images)
+  → 9. Speaker Notes Generator (LLM writes 3–5 sentences per slide)
+  → 10. PPT Generator          (python-pptx renders .pptx with themes)
+```
+
+Each LLM stage uses retry logic (3 attempts with exponential backoff) and graceful fallbacks to ensure the pipeline never crashes from transient failures.
+
+### Redis + Celery Workflow
+
+Narrato uses **Redis** as both the job store and the Celery message broker. The async workflow operates as follows:
+
+```
+Frontend (React)
+   │
+   ├── POST /generate  ──→  FastAPI creates job in Redis (status: "queued")
+   │                         │
+   │                         ├── If Celery available: enqueue task to Redis broker
+   │                         └── If Celery unavailable: run as FastAPI background task
+   │
+   ├── GET /status/{id} ──→  Reads job from Redis (progress: 0–100%)
+   │
+   ├── GET /download/{id} ─→ Returns .pptx file from disk
+   │
+   └── POST /preview/{id} ─→ Triggers LibreOffice conversion (background)
+
+Redis (Job Store)                    Celery Worker
+┌─────────────────────┐             ┌─────────────────────────┐
+│ narrato:job:{id}    │             │ generate_presentation   │
+│   status: queued    │◄────────────│   1. Update status      │
+│   progress: 0       │             │   2. Run full pipeline  │
+│   path: null        │             │   3. Update progress    │
+│   preview_urls: null│             │   4. Save .pptx path    │
+└─────────────────────┘             │   5. Set completed      │
+                                    └─────────────────────────┘
+```
+
+**Key design decisions:**
+- Jobs have a **24-hour TTL** in Redis
+- Celery tasks have a **120s soft timeout** and **180s hard timeout**
+- Tasks retry up to **2 times** with a 10-second delay
+- If Redis is unavailable, the system **gracefully degrades** to an in-memory job store
+- If Celery is unavailable, the system **falls back** to FastAPI background tasks
+
+### PPT Generation Flow
+
+The PPT generator (`ppt/generator.py`) takes the completed `PresentationState` and produces a `.pptx` file:
+
+1. **Theme selection** — picks from `modern`, `corporate`, or `minimal` theme configs
+2. **Slide rendering** — iterates over `structured_slides`, dispatches each to its type-specific renderer (14 layout types)
+3. **Speaker notes injection** — maps `speaker_notes` by `slide_id` and injects into each slide's notes page
+4. **Fallback rendering** — if any slide renderer fails, a generic fallback layout is used
+5. **File output** — saves to `{OUTPUT_DIR}/{uuid}.pptx` in 16:9 widescreen format
+
+All 14 slide layout types are supported:
+`title_slide`, `section_header`, `agenda_slide`, `problem_slide`, `stats_slide`, `feature_slide`, `comparison_slide`, `timeline_slide`, `example_slide`, `quote_slide`, `image_slide`, `conclusion_slide`, `cta_slide`, `thank_you_slide`
+
+### Preview System Flow
+
+The preview system converts completed `.pptx` files into slide thumbnail images:
+
+```
+POST /preview/{job_id}
+  → Validate job is completed and .pptx exists
+  → Background task starts:
+      1. LibreOffice headless converts .pptx → PDF
+      2. pdftoppm (poppler-utils) converts PDF → PNG images (150 DPI)
+      3. If pdftoppm unavailable, falls back to LibreOffice PNG conversion
+  → Preview images stored in outputs/previews/{job_id}/
+  → URLs saved to Redis job entry
+  → Frontend polls /status and receives preview_urls
+  → Images served via /previews/ static file mount
+```
+
+**System dependencies for previews:**
+- `libreoffice` (headless mode for PPTX → PDF conversion)
+- `poppler-utils` (provides `pdftoppm` for PDF → PNG conversion)
+
+---
+
+## 31. Setup (UV)
+
+### Prerequisites
+
+- **Python** ≥ 3.11
+- **Node.js** ≥ 18 (for frontend)
+- **Redis** server (for job store and Celery broker)
+- **LibreOffice** and **poppler-utils** (for slide preview generation)
+
+### Install uv (Python package manager)
+
+```bash
+# Install uv (recommended)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or via pip
+pip install uv
+```
+
+### Install system dependencies
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install redis-server libreoffice-impress poppler-utils
+
+# macOS
+brew install redis libreoffice poppler
+```
+
+### Install Python dependencies
+
+```bash
+# From the project root
+uv sync
+```
+
+This reads `pyproject.toml` and `uv.lock` to install all Python dependencies into a virtual environment.
+
+### Configure environment
+
+```bash
+# Copy the example env file
+cp .env.example .env
+
+# Edit .env and add your API keys:
+#   OPENAI_API_KEY=sk-your-key-here
+#   UNSPLASH_ACCESS_KEY=your-unsplash-key  (optional, for images)
+```
+
+### Run the backend (FastAPI)
+
+```bash
+cd backend
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The API will be available at `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
+
+### Run the Celery worker
+
+```bash
+# In a separate terminal
+cd backend
+uv run celery -A worker.celery_app worker --loglevel=info
+```
+
+The worker connects to Redis and processes presentation generation jobs asynchronously.
+
+### Run the frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173`.
+
+### Start Redis
+
+```bash
+# Start Redis server
+redis-server
+
+# Or as a daemon
+redis-server --daemonize yes
+
+# Verify it's running
+redis-cli ping
+# → PONG
+```
+
+### Verify the system
+
+```bash
+# Check that all services are running
+curl http://localhost:8000/health
+# → {"status":"ok","version":"2.0.0","redis":"connected","celery":"connected"}
+```
+
+### Full startup sequence (all terminals)
+
+```bash
+# Terminal 1: Redis
+redis-server
+
+# Terminal 2: Celery worker
+cd backend && uv run celery -A worker.celery_app worker --loglevel=info
+
+# Terminal 3: FastAPI backend
+cd backend && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 4: Frontend
+cd frontend && npm install && npm run dev
+```
+
+Then open `http://localhost:5173` in your browser to use Narrato.
+
+---
