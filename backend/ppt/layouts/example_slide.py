@@ -1,76 +1,57 @@
-from pptx.util import Inches, Pt  # type: ignore
+from pptx.util import Inches  # type: ignore
 from pptx.enum.text import PP_ALIGN  # type: ignore
-from ppt.generator import add_text_box, hex_to_rgb, set_background
+
+from ppt.generator import add_text_box
+from ppt.components import (
+    heading_block, accent_underline, subheading_text, body_text,
+    highlight_box,
+)
+from ppt.design_system import Grid, Spacing, Typography, VLayout
 
 
 def render(slide, content: dict, theme, image_path=None):
     # Title
-    add_text_box(
-        slide, content.get("title", "Case Study"),
-        Inches(0.8), Inches(0.4), Inches(11.73), Inches(0.9),
-        theme.font_heading, theme.heading_size, bold=True,
-        color=theme.primary, align=PP_ALIGN.LEFT,
-    )
+    heading_block(slide, content.get("title", "Case Study"), theme)
 
     # Accent underline
-    bar = slide.shapes.add_shape(1, Inches(0.8), Inches(1.25), Inches(1.5), Inches(0.06))
-    bar.fill.solid()
-    bar.fill.fore_color.rgb = hex_to_rgb(theme.accent)
-    bar.line.fill.background()
+    accent_underline(slide, theme)
 
-    # Example title
-    add_text_box(
-        slide, content.get("example_title", ""),
-        Inches(0.8), Inches(1.7), Inches(11.73), Inches(0.7),
-        theme.font_heading, 24, bold=True,
-        color=theme.secondary, align=PP_ALIGN.LEFT,
+    # Example subtitle
+    subheading_text(
+        slide, content.get("example_title", ""), theme,
+        y=VLayout.ACCENT_Y + Spacing.ELEMENT,
+        color=theme.secondary,
     )
 
-    # Context section
-    add_text_box(
-        slide, "Context",
-        Inches(0.8), Inches(2.6), Inches(5.5), Inches(0.5),
-        theme.font_heading, 16, bold=True,
-        color=theme.accent, align=PP_ALIGN.LEFT,
-    )
-    add_text_box(
-        slide, content.get("context", ""),
-        Inches(0.8), Inches(3.1), Inches(5.5), Inches(1.5),
-        theme.font_body, 15, bold=False,
-        color=theme.text, align=PP_ALIGN.LEFT,
-    )
+    # Two-column: Context / Result  (grid-based)
+    cols = Grid.columns_layout(2, gap=0.8)
+    section_y = VLayout.CONTENT_START + Spacing.SECTION
 
-    # Result section
-    add_text_box(
-        slide, "Result",
-        Inches(7.0), Inches(2.6), Inches(5.5), Inches(0.5),
-        theme.font_heading, 16, bold=True,
-        color=theme.accent, align=PP_ALIGN.LEFT,
-    )
-    add_text_box(
-        slide, content.get("result", ""),
-        Inches(7.0), Inches(3.1), Inches(5.5), Inches(1.5),
-        theme.font_body, 15, bold=False,
-        color=theme.text, align=PP_ALIGN.LEFT,
-    )
+    for i, (label, key) in enumerate([("Context", "context"), ("Result", "result")]):
+        col_left, col_w = cols[i]
 
-    # Takeaway box
-    takeaway_bg = slide.shapes.add_shape(
-        1, Inches(0.8), Inches(5.2), Inches(11.73), Inches(1.5),
-    )
-    takeaway_bg.fill.solid()
-    takeaway_bg.fill.fore_color.rgb = hex_to_rgb(theme.primary)
-    takeaway_bg.line.fill.background()
+        # Section label
+        add_text_box(
+            slide, label,
+            Inches(col_left), Inches(section_y),
+            Inches(col_w), Inches(0.5),
+            theme.font_heading, Typography.CAPTION + 2, bold=True,
+            color=theme.accent, align=PP_ALIGN.LEFT,
+        )
 
-    add_text_box(
-        slide, "Key Takeaway",
-        Inches(1.2), Inches(5.3), Inches(10.93), Inches(0.5),
-        theme.font_heading, 14, bold=True,
-        color=theme.background, align=PP_ALIGN.LEFT,
-    )
-    add_text_box(
-        slide, content.get("takeaway", ""),
-        Inches(1.2), Inches(5.8), Inches(10.93), Inches(0.8),
-        theme.font_body, 16, bold=False,
-        color=theme.background, align=PP_ALIGN.LEFT,
+        # Section body
+        body_text(
+            slide, content.get(key, ""), theme,
+            left=col_left, y=section_y + 0.5 + Spacing.TIGHT,
+            width=col_w, height=1.5,
+            size=Typography.BODY - 4, color=theme.text,
+        )
+
+    # Takeaway highlight box
+    highlight_box(
+        slide, theme,
+        label="Key Takeaway",
+        text=content.get("takeaway", ""),
+        y=5.3,
+        height=1.4,
     )

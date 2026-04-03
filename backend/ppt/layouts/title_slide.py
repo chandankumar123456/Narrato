@@ -1,40 +1,32 @@
-from pptx.util import Inches, Pt # type: ignore
-from pptx.enum.text import PP_ALIGN # type: ignore
-from ppt.generator import add_text_box, hex_to_rgb, set_background
+from pptx.enum.text import PP_ALIGN  # type: ignore
+
+from ppt.components import (
+    accent_bar_top, accent_bar_bottom, hero_text, body_text, caption_text,
+)
+from ppt.design_system import Grid, Typography
+
 
 def render(slide, content: dict, theme, image_path=None):
-    # Accent bar at top
-    bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(0.12))
-    bar.fill.solid()
-    bar.fill.fore_color.rgb = hex_to_rgb(theme.primary)
-    bar.line.fill.background()
+    # Top accent bar
+    accent_bar_top(slide, theme)
 
-    # Title
-    add_text_box(
-        slide, content.get("title", ""),
-        Inches(1), Inches(2.5), Inches(11.33), Inches(1.8),
-        theme.font_heading, 48, bold=True,
-        color=theme.primary, align=PP_ALIGN.CENTER
-    )
+    # Hero title — dominant element, centred
+    hero_text(slide, content.get("title", ""), theme, y=2.2)
 
     # Subtitle
-    add_text_box(
-        slide, content.get("subtitle", ""),
-        Inches(1.5), Inches(4.4), Inches(10.33), Inches(0.8),
-        theme.font_body, 24, bold=False,
-        color=theme.secondary, align=PP_ALIGN.CENTER
+    left, width = Grid.center(8)
+    body_text(
+        slide, content.get("subtitle", ""), theme,
+        left=left, y=4.2, width=width, height=0.8,
+        size=Typography.SUBHEADING - 4, color=theme.secondary,
+        align=PP_ALIGN.CENTER,
     )
 
     # Presenter
-    add_text_box(
-        slide, content.get("presenter", ""),
-        Inches(1.5), Inches(5.5), Inches(10.33), Inches(0.5),
-        theme.font_body, 16, bold=False,
-        color=theme.text, align=PP_ALIGN.CENTER
+    caption_text(
+        slide, content.get("presenter", ""), theme,
+        y=5.5, color=theme.text,
     )
 
-    # Accent bar at bottom
-    bar2 = slide.shapes.add_shape(1, Inches(0), Inches(7.35), Inches(13.33), Inches(0.15))
-    bar2.fill.solid()
-    bar2.fill.fore_color.rgb = hex_to_rgb(theme.accent)
-    bar2.line.fill.background()
+    # Bottom accent bar
+    accent_bar_bottom(slide, theme)

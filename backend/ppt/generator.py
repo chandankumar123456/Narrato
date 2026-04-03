@@ -110,11 +110,17 @@ def _render_slide(slide, slide_data: dict, theme: ThemeConfig):
 
 def _render_fallback(slide, slide_data: dict, theme: ThemeConfig):
     """Generic fallback layout for unknown or failed slide types."""
+    from ppt.design_system import Grid, Typography, VLayout
+
     content = slide_data.get("content", {})
     title = content.get("title", "") or content.get("section_title", "") or ""
     body = content.get("body", "") or content.get("description", "") or ""
-    add_text_box(slide, title, Inches(0.5), Inches(0.3), Inches(12), Inches(1),
-                 theme.font_heading, theme.heading_size, bold=True, color=theme.primary)
+
+    left, width = Grid.full_width()
+    add_text_box(slide, title,
+                 Inches(left), Inches(VLayout.TITLE_TOP), Inches(width), Inches(VLayout.TITLE_HEIGHT),
+                 theme.font_heading, Typography.HEADING, bold=True, color=theme.primary)
     if body:
-        add_text_box(slide, body, Inches(0.5), Inches(1.5), Inches(12), Inches(5),
-                     theme.font_body, theme.body_size, color=theme.text)
+        add_text_box(slide, body,
+                     Inches(left), Inches(VLayout.CONTENT_START), Inches(width), Inches(4.5),
+                     theme.font_body, Typography.BODY, color=theme.text)
