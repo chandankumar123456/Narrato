@@ -12,6 +12,7 @@ from ppt.components import heading_block, accent_underline, body_text
 from ppt.design_system import (
     ContentTransform, Grid, Spacing, Typography, VLayout, VStack,
 )
+from models.presentation_state import MAX_WORDS_PER_FIELD
 
 
 def render(slide, content: dict, theme, image_path=None):
@@ -42,7 +43,7 @@ def render(slide, content: dict, theme, image_path=None):
 
     for key in field_keys:
         raw_value = content.get(key, "")
-        display_value = ContentTransform.truncate(str(raw_value), max_words=12)
+        display_value = ContentTransform.truncate(str(raw_value), max_words=MAX_WORDS_PER_FIELD)
         label = key.replace("_", " ").title()
 
         if not flow.fits(1.0):

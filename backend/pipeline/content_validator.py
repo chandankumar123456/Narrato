@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import logging
 
-from models.presentation_state import PresentationState
+from models.presentation_state import PresentationState, MAX_WORDS_PER_FIELD
 
 logger = logging.getLogger(__name__)
-
-MAX_WORDS_PER_FIELD = 12
 
 
 class ValidationError(RuntimeError):

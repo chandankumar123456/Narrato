@@ -14,14 +14,14 @@ from __future__ import annotations
 
 import logging
 
-from models.presentation_state import PresentationState
+from models.presentation_state import PresentationState, MAX_WORDS_PER_FIELD, MAX_WORDS_NAME
 from services.llm_client import call_llm
 
 logger = logging.getLogger(__name__)
 
 # Maximum attempts to regenerate a single field before hard failure
 MAX_FIELD_ATTEMPTS = 3
-MAX_WORDS = 12
+MAX_WORDS = MAX_WORDS_PER_FIELD
 
 
 class StrictContentError(RuntimeError):
@@ -239,7 +239,7 @@ async def _generate_example_content(
     """Generate one example slide — each field is produced independently."""
     # Generate example name
     name = await _generate_field_value(
-        _FIELD_GENERATOR_SYSTEM.format(max_words=6, forbidden_clause=fc),
+        _FIELD_GENERATOR_SYSTEM.format(max_words=MAX_WORDS_NAME, forbidden_clause=fc),
         f"Give the NAME of example {example_num} of {total_examples} "
         f"of {topic}.  Output only the name.",
         forbidden, "name",
@@ -275,7 +275,7 @@ async def _generate_summary_content(
     # Generate bullet points (one per example)
     raw_bullets = await _generate_field_value(
         _BULLET_SYSTEM.format(count=n_examples, max_words=MAX_WORDS, forbidden_clause=fc),
-        f"Summarise {n_examples} examples of {topic} "
+        f"Summarize {n_examples} examples of {topic} "
         f"(each had fields: {', '.join(fields)}).\n"
         f"Tone: {tone}\nOutput {n_examples} lines, one per example.",
         forbidden, "bullets",

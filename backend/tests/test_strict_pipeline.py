@@ -543,7 +543,7 @@ class TestStrictContentStructurer:
             state = await generate_strict_content(state)
 
         assert state.structured_slides is not None
-        assert len(state.structured_slides) == 5  # 2 + 2 + 1
+        assert len(state.structured_slides) == 5  # title + definition + 2 examples + summary
 
         # Check example slides have ONLY name + required fields
         for slide in state.structured_slides:

@@ -1,6 +1,14 @@
 from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional
 
+# Slide count boundaries (default mode only; strict mode uses exact counts)
+MIN_SLIDE_COUNT = 5
+MAX_SLIDE_COUNT = 30
+
+# Shared word-limit constant used by structurer, validator, and renderer
+MAX_WORDS_PER_FIELD = 12
+MAX_WORDS_NAME = 6
+
 class PresentationState(BaseModel):
     # Identity
     topic: str
@@ -43,7 +51,7 @@ class PresentationState(BaseModel):
     @field_validator("slide_count", mode="before")
     @classmethod
     def clamp_slide_count(cls, v, info):
-        return max(5, min(v, 30))
+        return max(MIN_SLIDE_COUNT, min(v, MAX_SLIDE_COUNT))
 
     @model_validator(mode="after")
     def enforce_strict_slide_count(self):

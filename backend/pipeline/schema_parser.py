@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 # ── Dedicated system prompt for the Schema Parser LLM role ────────────
 SCHEMA_PARSER_SYSTEM_PROMPT = (
-    "ROLE: You are a STRICT SPECIFICATION PARSER.  You extract structured "
-    "requirements from a user prompt.  You are NOT a writer.\n\n"
+    "ROLE: You are a STRICT SPECIFICATION PARSER. You extract structured "
+    "requirements from a user prompt. You are NOT a writer.\n\n"
     "RULES:\n"
     "1. Extract ONLY what the user explicitly states.\n"
     "2. Do NOT infer, expand, guess, or add fields the user did not request.\n"
