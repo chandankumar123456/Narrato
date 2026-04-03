@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional
 
 class PresentationState(BaseModel):
@@ -40,7 +40,18 @@ class PresentationState(BaseModel):
     user_schema: Optional[dict] = None
     generation_mode: Optional[str] = None  # "strict" | "default" | None
 
-    @field_validator("slide_count")
+    @field_validator("slide_count", mode="before")
     @classmethod
-    def clamp_slide_count(cls, v):
+    def clamp_slide_count(cls, v, info):
         return max(5, min(v, 30))
+
+    @model_validator(mode="after")
+    def enforce_strict_slide_count(self):
+        """In strict mode, override the clamped slide_count with the exact
+        schema-derived value.  Strict mode requires EXACT counts — no guards."""
+        if self.generation_mode == "strict" and self.user_schema:
+            n = self.user_schema.get("examples_required", 0)
+            exact = 2 + n + 1  # title + definition + N examples + summary
+            if self.slide_count != exact:
+                object.__setattr__(self, "slide_count", exact)
+        return self

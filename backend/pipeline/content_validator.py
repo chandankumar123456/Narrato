@@ -1,7 +1,10 @@
-"""Phase 5: Content Validator.
+"""Phase 5: Content Validator — NON-CORRECTIVE ASSERTION ONLY.
 
-Post-generation validation loop that checks output against the user schema
-and triggers selective regeneration on failure (up to MAX_RETRIES times).
+Validates that generated output matches the user schema EXACTLY.
+Does NOT modify, truncate, or fix content.  If invalid → HARD ERROR.
+
+This is the final safety net.  All constraint enforcement happens during
+generation (strict_content_structurer).  The validator only ASSERTS.
 """
 
 from __future__ import annotations
@@ -12,25 +15,21 @@ from models.presentation_state import PresentationState
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 2
 MAX_WORDS_PER_FIELD = 12
 
 
-def _truncate_to_word_limit(text: str, max_words: int) -> str:
-    """Truncate *text* to at most *max_words* words."""
-    words = text.split()
-    if len(words) <= max_words:
-        return text
-    return " ".join(words[:max_words])
+class ValidationError(RuntimeError):
+    """Raised when strict-mode output fails validation checks."""
 
 
-async def validate_content(state: PresentationState) -> PresentationState:
-    """Validate structured_slides against user_schema.
+# ── Public entry point ────────────────────────────────────────────────
 
-    Returns the state unchanged when all checks pass.  When failures are
-    detected the failing example slides are regenerated up to MAX_RETRIES
-    times.  After exhausting retries the best-effort output is returned
-    with a validation_status flag in metadata.
+def validate_content(state: PresentationState) -> PresentationState:
+    """Assert that *state.structured_slides* complies with *state.user_schema*.
+
+    Returns the state with ``validation_status: "passed"`` in metadata when
+    all checks pass.  Raises ``ValidationError`` on any violation — the
+    validator NEVER modifies content.
     """
     schema = state.user_schema
     if not schema:
@@ -38,23 +37,18 @@ async def validate_content(state: PresentationState) -> PresentationState:
 
     errors = _run_checks(state)
 
-    if not errors:
-        return _set_validation_status(state, "passed")
-
-    for attempt in range(1, MAX_RETRIES + 1):
-        logger.warning(
-            "Validation attempt %d/%d - %d error(s): %s",
-            attempt, MAX_RETRIES, len(errors),
-            "; ".join(errors),
+    if errors:
+        for err in errors:
+            logger.error("VALIDATION FAILURE: %s", err)
+        raise ValidationError(
+            f"Strict validation failed with {len(errors)} error(s): "
+            + "; ".join(errors)
         )
-        state = await _regenerate_failing_slides(state, errors)
-        errors = _run_checks(state)
-        if not errors:
-            return _set_validation_status(state, "passed")
 
-    logger.error("Validation failed after %d retries: %s", MAX_RETRIES, errors)
-    return _set_validation_status(state, "partial", errors)
+    return _set_validation_status(state, "passed")
 
+
+# ── Validation checks ────────────────────────────────────────────────
 
 def _run_checks(state: PresentationState) -> list[str]:
     """Return a list of human-readable error strings (empty means pass)."""
@@ -68,7 +62,7 @@ def _run_checks(state: PresentationState) -> list[str]:
     fields_required: list[str] = schema.get("fields_required", [])
     forbidden: list[str] = schema.get("forbidden_content", [])
 
-    # 1. Slide count check
+    # 1. Slide count check — EXACT match required
     expected_count = 2 + n_examples + 1
     if len(slides) != expected_count:
         errors.append(
@@ -82,7 +76,7 @@ def _run_checks(state: PresentationState) -> list[str]:
             f"Example count mismatch: expected {n_examples}, got {len(example_slides)}"
         )
 
-    # 3. Field completeness check
+    # 3. Field completeness check — every required field must be present and non-empty
     for s in example_slides:
         content = s.get("content", {})
         sid = s.get("slide_id", "?")
@@ -91,7 +85,16 @@ def _run_checks(state: PresentationState) -> list[str]:
             if not val or (isinstance(val, str) and not val.strip()):
                 errors.append(f"Slide {sid}: missing required field '{field}'")
 
-    # 4. Forbidden content check
+    # 4. No extra keys in example slides (only 'name' + fields_required)
+    allowed_keys = {"name"} | set(fields_required)
+    for s in example_slides:
+        content = s.get("content", {})
+        sid = s.get("slide_id", "?")
+        extra = set(content.keys()) - allowed_keys
+        if extra:
+            errors.append(f"Slide {sid}: unexpected extra keys {extra}")
+
+    # 5. Forbidden content check — substring scan
     forbidden_lower = [f.lower() for f in forbidden]
     for s in slides:
         content = s.get("content", {})
@@ -101,7 +104,7 @@ def _run_checks(state: PresentationState) -> list[str]:
             if term in text_blob:
                 errors.append(f"Slide {sid}: contains forbidden content '{term}'")
 
-    # 5. Word count check on example fields
+    # 6. Word count check on example fields
     for s in example_slides:
         content = s.get("content", {})
         sid = s.get("slide_id", "?")
@@ -114,6 +117,8 @@ def _run_checks(state: PresentationState) -> list[str]:
 
     return errors
 
+
+# ── Helpers ───────────────────────────────────────────────────────────
 
 def _content_to_text(content: dict) -> str:
     """Flatten a slide content dict into a single string for scanning."""
@@ -130,70 +135,6 @@ def _content_to_text(content: dict) -> str:
         elif isinstance(v, dict):
             parts.extend(str(iv) for iv in v.values())
     return " ".join(parts)
-
-
-async def _regenerate_failing_slides(
-    state: PresentationState, errors: list[str]
-) -> PresentationState:
-    """Re-generate only the example slides that have validation errors."""
-    from pipeline.strict_content_structurer import _generate_example
-
-    schema = state.user_schema or {}
-    fields_required = schema.get("fields_required", [])
-    forbidden = schema.get("forbidden_content", [])
-    topic = schema.get("topic", state.topic)
-    n_examples = schema.get("examples_required", 0)
-
-    forbidden_clause = ""
-    if forbidden:
-        forbidden_clause = (
-            "\n\nFORBIDDEN - you MUST NOT include ANY of the following: "
-            + ", ".join(forbidden) + "."
-        )
-
-    # Identify failing slide IDs from error messages
-    failing_ids: set[int] = set()
-    for err in errors:
-        if err.startswith("Slide "):
-            try:
-                sid = int(err.split(":")[0].replace("Slide ", ""))
-                failing_ids.add(sid)
-            except (ValueError, IndexError):
-                pass
-
-    if not failing_ids:
-        return state
-
-    updated_slides = list(state.structured_slides or [])
-    for i, slide in enumerate(updated_slides):
-        if slide.get("slide_id") not in failing_ids:
-            continue
-        if slide.get("type") != "example_detail_slide":
-            continue
-
-        # Determine example number from slide plan
-        example_num = 1
-        count = 0
-        for s in (state.slide_plan or []):
-            if s.get("type") == "example_detail_slide":
-                count += 1
-                if s.get("slide_id") == slide.get("slide_id"):
-                    example_num = count
-                    break
-
-        new_content = await _generate_example(
-            topic, example_num, n_examples, fields_required,
-            state.tone, forbidden_clause,
-        )
-        # Enforce word-count truncation at this layer too
-        for field in fields_required:
-            val = new_content.get(field, "")
-            if isinstance(val, str):
-                new_content[field] = _truncate_to_word_limit(val, MAX_WORDS_PER_FIELD)
-
-        updated_slides[i] = {**slide, "content": new_content}
-
-    return state.model_copy(update={"structured_slides": updated_slides})
 
 
 def _set_validation_status(

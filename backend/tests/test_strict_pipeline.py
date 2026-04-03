@@ -5,12 +5,14 @@ from unittest.mock import AsyncMock, patch
 
 from models.presentation_state import PresentationState
 from pipeline.schema_parser import UserSchema, parse_user_schema
-from pipeline.state_builder import build_state
+from pipeline.state_builder import build_state, StrictSchemaError
 from pipeline.strict_slide_planner import plan_slides_strict
 from pipeline.content_validator import (
     _run_checks,
     _content_to_text,
     _set_validation_status,
+    validate_content,
+    ValidationError,
     MAX_WORDS_PER_FIELD,
 )
 
@@ -117,7 +119,7 @@ class TestStrictState:
     def test_state_strict_fields_set(self):
         state = PresentationState(
             topic="Test",
-            user_schema={"topic": "Test", "examples_required": 2},
+            user_schema={"topic": "Test", "examples_required": 2, "fields_required": ["a"]},
             generation_mode="strict",
         )
         assert state.generation_mode == "strict"
@@ -139,19 +141,49 @@ class TestStrictState:
         assert state.generation_mode == "strict"
         assert state.topic == "food commodities"
         assert state.examples_count == 3
-        # title + definition + 3 examples + summary = 6
+        # title + definition + 3 examples + summary = 6, EXACT (no clamping)
         assert state.slide_count == 6
         assert state.user_schema is not None
 
-    def test_build_state_strict_minimum_slides(self):
-        """Even with 1 example the slide count should be clamped to 5."""
+    def test_build_state_strict_exact_slide_count_no_min_guard(self):
+        """With 1 example: 2 + 1 + 1 = 4.  No min(5) guard in strict mode."""
         schema = UserSchema(
             topic="test_topic", examples_required=1,
             fields_required=["field_a"], is_structured_request=True,
         )
         state = build_state({}, user_schema=schema)
-        # 2 + 1 + 1 = 4, clamped to 5 by build_state max()
-        assert state.slide_count == 5
+        # EXACT: 2 + 1 + 1 = 4, NOT clamped to 5
+        assert state.slide_count == 4
+
+    def test_build_state_strict_fails_without_topic(self):
+        schema = UserSchema(
+            topic="",
+            examples_required=2,
+            fields_required=["a"],
+            is_structured_request=True,
+        )
+        with pytest.raises(StrictSchemaError, match="topic"):
+            build_state({}, user_schema=schema)
+
+    def test_build_state_strict_fails_without_examples(self):
+        schema = UserSchema(
+            topic="test",
+            examples_required=0,
+            fields_required=["a"],
+            is_structured_request=True,
+        )
+        with pytest.raises(StrictSchemaError, match="examples_required"):
+            build_state({}, user_schema=schema)
+
+    def test_build_state_strict_fails_without_fields(self):
+        schema = UserSchema(
+            topic="test",
+            examples_required=2,
+            fields_required=[],
+            is_structured_request=True,
+        )
+        with pytest.raises(StrictSchemaError, match="fields_required"):
+            build_state({}, user_schema=schema)
 
 
 # =====================================================================
@@ -234,9 +266,16 @@ class TestStrictSlidePlanner:
         ids = [s["slide_id"] for s in state.slide_plan]
         assert ids == list(range(len(ids)))
 
+    def test_exact_slide_count_formula(self):
+        """Slide count is EXACTLY 2 + N + 1 for any N."""
+        for n in [1, 2, 3, 5, 10]:
+            state = self._make_strict_state(n_examples=n)
+            state = plan_slides_strict(state)
+            assert len(state.slide_plan) == 2 + n + 1
+
 
 # =====================================================================
-# Phase 5: Content Validator checks
+# Phase 5: Content Validator checks (assertion-only, non-corrective)
 # =====================================================================
 
 class TestContentValidator:
@@ -267,7 +306,6 @@ class TestContentValidator:
 
         return PresentationState(
             topic="food commodities",
-            slide_count=max(5, 2 + n_examples + 1),
             user_schema=schema_dict,
             generation_mode="strict",
             structured_slides=slides,
@@ -278,6 +316,23 @@ class TestContentValidator:
         state = self._make_valid_state()
         errors = _run_checks(state)
         assert errors == []
+
+    def test_validate_content_passes_valid(self):
+        """validate_content returns state with passed status on valid input."""
+        state = self._make_valid_state()
+        result = validate_content(state)
+        assert result.metadata["validation_status"] == "passed"
+
+    def test_validate_content_raises_on_invalid(self):
+        """validate_content raises ValidationError on violations — no fixing."""
+        state = self._make_valid_state()
+        slides = list(state.structured_slides)
+        bad_content = dict(slides[2]["content"])
+        del bad_content["history"]
+        slides[2] = {**slides[2], "content": bad_content}
+        state = state.model_copy(update={"structured_slides": slides})
+        with pytest.raises(ValidationError):
+            validate_content(state)
 
     def test_wrong_slide_count_detected(self):
         state = self._make_valid_state()
@@ -290,7 +345,6 @@ class TestContentValidator:
     def test_missing_field_detected(self):
         state = self._make_valid_state()
         slides = list(state.structured_slides)
-        # Remove 'history' from first example
         bad_content = dict(slides[2]["content"])
         del bad_content["history"]
         slides[2] = {**slides[2], "content": bad_content}
@@ -331,6 +385,17 @@ class TestContentValidator:
         state = PresentationState(topic="test")
         errors = _run_checks(state)
         assert errors == []
+
+    def test_extra_keys_detected(self):
+        """Extra keys in example content should be flagged."""
+        state = self._make_valid_state()
+        slides = list(state.structured_slides)
+        bad_content = dict(slides[2]["content"])
+        bad_content["description"] = "should not be here"
+        slides[2] = {**slides[2], "content": bad_content}
+        state = state.model_copy(update={"structured_slides": slides})
+        errors = _run_checks(state)
+        assert any("unexpected extra keys" in e for e in errors)
 
 
 # =====================================================================
@@ -383,7 +448,7 @@ class TestExampleDetailSlideRendering:
              "content": {"title": "Food Commodities", "subtitle": "Overview", "presenter": ""}, "image_path": None},
             {"slide_id": 1, "type": "feature_slide",
              "content": {"title": "What is Food Commodities?",
-                         "features": [{"icon": "📖", "label": "Definition",
+                         "features": [{"icon": "\U0001F4D6", "label": "Definition",
                                        "description": "Basic agricultural products traded globally."}]},
              "image_path": None},
             {"slide_id": 2, "type": "example_detail_slide",
@@ -399,7 +464,6 @@ class TestExampleDetailSlideRendering:
 
         state = PresentationState(
             topic="food commodities",
-            slide_count=5,
             user_schema=schema_dict,
             generation_mode="strict",
             structured_slides=slides,
@@ -448,3 +512,66 @@ class TestDefaultModePreserved:
         state = assign_slide_types(state)
         assert state.slide_plan[0]["type"] == "title_slide"
         assert state.slide_plan[-1]["type"] == "cta_slide"
+
+
+# =====================================================================
+# Strict content structurer (field-level generation, mocked LLM)
+# =====================================================================
+
+class TestStrictContentStructurer:
+    @pytest.mark.asyncio
+    async def test_per_field_generation(self):
+        """Each field is generated independently via call_llm."""
+        from pipeline.strict_content_structurer import generate_strict_content
+
+        schema = UserSchema(
+            topic="food commodities",
+            examples_required=2,
+            fields_required=["origin", "history"],
+            is_structured_request=True,
+        )
+        state = build_state({"tone": "professional"}, user_schema=schema)
+        state = plan_slides_strict(state)
+
+        async def mock_call_llm(system, user):
+            # Return short valid answers for any prompt
+            if "BULLET" in system:
+                return "Rice overview\nWheat overview"
+            return "Short factual answer"
+
+        with patch("pipeline.strict_content_structurer.call_llm", side_effect=mock_call_llm):
+            state = await generate_strict_content(state)
+
+        assert state.structured_slides is not None
+        assert len(state.structured_slides) == 5  # 2 + 2 + 1
+
+        # Check example slides have ONLY name + required fields
+        for slide in state.structured_slides:
+            if slide["type"] == "example_detail_slide":
+                content = slide["content"]
+                assert "name" in content
+                assert "origin" in content
+                assert "history" in content
+                # No extra keys allowed
+                assert set(content.keys()) == {"name", "origin", "history"}
+
+    @pytest.mark.asyncio
+    async def test_no_fallback_content(self):
+        """Strict mode raises error on LLM failure - no fallback."""
+        from pipeline.strict_content_structurer import generate_strict_content, StrictContentError
+
+        schema = UserSchema(
+            topic="food commodities",
+            examples_required=1,
+            fields_required=["origin"],
+            is_structured_request=True,
+        )
+        state = build_state({"tone": "professional"}, user_schema=schema)
+        state = plan_slides_strict(state)
+
+        async def always_fail(system, user):
+            raise RuntimeError("LLM down")
+
+        with patch("pipeline.strict_content_structurer.call_llm", side_effect=always_fail):
+            with pytest.raises((StrictContentError, RuntimeError)):
+                await generate_strict_content(state)

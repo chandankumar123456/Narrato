@@ -29,7 +29,7 @@ async def run_pipeline(prompt: str, options: dict = {},
     logger.info(f"[pipeline] Starting for prompt: {prompt[:80]}")
     _report(5)
 
-    # Stage 1: Parse prompt signals
+    # Stage 1: Parse prompt signals (used for tone/audience hints)
     signals = await parse_prompt(prompt)
     signals.update({k: v for k, v in options.items() if v is not None})
 
@@ -46,20 +46,20 @@ async def run_pipeline(prompt: str, options: dict = {},
     _report(20)
 
     if state.generation_mode == "strict":
-        # ── Strict pipeline path ──────────────────────────────────
+        # ── STRICT PIPELINE — isolated execution path ─────────────
         logger.info("[pipeline][strict] Using schema-driven pipeline")
 
-        # Plan slides deterministically from schema
+        # Deterministic slide plan from schema (no story, no sections)
         state = plan_slides_strict(state)
         logger.info(f"[pipeline][strict] Planned {len(state.slide_plan)} slides")
         _report(40)
 
-        # Generate content constrained to user-specified fields
+        # Per-field constrained generation (field-level regeneration inside)
         state = await generate_strict_content(state)
         _report(55)
 
-        # Validate and retry if needed
-        state = await validate_content(state)
+        # Non-corrective validation — assert only, hard fail if invalid
+        state = validate_content(state)
         logger.info(
             "[pipeline][strict] Validation: %s",
             (state.metadata or {}).get("validation_status", "unknown"),

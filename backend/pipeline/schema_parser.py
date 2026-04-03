@@ -3,6 +3,9 @@
 Parses user input into a rigid specification schema that drives strict-mode
 pipeline stages.  Returns ``None`` for generic/unstructured prompts so the
 default pipeline handles them.
+
+Uses a dedicated SYSTEM PROMPT for high-precision extraction — the LLM acts
+as a controlled specification parser, NOT a creative writer.
 """
 
 from __future__ import annotations
@@ -14,6 +17,26 @@ from pydantic import BaseModel, Field
 from services.llm_client import call_llm_json
 
 logger = logging.getLogger(__name__)
+
+# ── Dedicated system prompt for the Schema Parser LLM role ────────────
+SCHEMA_PARSER_SYSTEM_PROMPT = (
+    "ROLE: You are a STRICT SPECIFICATION PARSER.  You extract structured "
+    "requirements from a user prompt.  You are NOT a writer.\n\n"
+    "RULES:\n"
+    "1. Extract ONLY what the user explicitly states.\n"
+    "2. Do NOT infer, expand, guess, or add fields the user did not request.\n"
+    "3. Do NOT add explanatory text.\n"
+    "4. Return ONLY valid JSON — no markdown, no commentary.\n\n"
+    "OUTPUT SCHEMA (all fields required):\n"
+    "{\n"
+    '  "topic": "<core subject as stated by user>",\n'
+    '  "examples_required": <exact integer count of examples requested, 0 if none>,\n'
+    '  "fields_required": ["<field1>", "<field2>"],  // ONLY user-specified per-example fields\n'
+    '  "forbidden_content": ["<topic1>", "<topic2>"],  // off-topic categories derived from domain\n'
+    '  "is_structured_request": true/false  // true ONLY if user specifies exact count AND specific fields\n'
+    "}\n\n"
+    "FORBIDDEN in output: extra keys, explanations, defaults, invented fields."
+)
 
 
 class UserSchema(BaseModel):
@@ -33,28 +56,10 @@ async def parse_user_schema(prompt: str) -> Optional[UserSchema]:
     requirements) so the default pipeline can handle it.
     """
 
-    system = (
-        "You are a specification parser.  Analyse the user's presentation "
-        "prompt and extract ONLY what they explicitly state.\n\n"
-        "Return a JSON object with these fields:\n"
-        "- topic (string): the core subject\n"
-        "- examples_required (int): exact count of examples requested (0 if none)\n"
-        "- fields_required (list[str]): per-example fields the user specified "
-        "(e.g. [\"origin\", \"history\"]).  ONLY include fields the user "
-        "explicitly mentioned.  Do NOT infer, expand, or add extra fields.\n"
-        "- forbidden_content (list[str]): topics that would be off-topic or "
-        "unrelated to the user's request (e.g. market analysis, investment "
-        "content, supply chain, generic explanations).  Derive these from the "
-        "domain context.\n"
-        "- is_structured_request (bool): true if the prompt contains specific "
-        "structural requirements (exact example count AND specific fields), "
-        "false for generic prompts like 'make me a presentation about X'."
-    )
-
     user = f"User prompt: {prompt}"
 
     try:
-        result = await call_llm_json(system, user)
+        result = await call_llm_json(SCHEMA_PARSER_SYSTEM_PROMPT, user)
         schema = UserSchema(**result)
     except Exception:
         logger.warning("Failed to parse user schema, falling back to default pipeline")
