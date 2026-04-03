@@ -1,7 +1,0 @@
-fastapi
-uvicorn 
-python-pptx 
-openai 
-psycopg2-binary 
-sqlalchemy
-python-dotenv
