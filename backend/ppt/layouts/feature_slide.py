@@ -1,22 +1,24 @@
+"""Feature slide — GRID/CARDS layout for feature cards."""
+
 from ppt.components import (
     heading_block, accent_underline, card as render_card,
 )
-from ppt.design_system import Grid, VLayout
+from ppt.design_system import Grid, Spacing, VLayout
 
 
 def render(slide, content: dict, theme, image_path=None):
-    # Title
+    # PRIMARY: Title heading
     heading_block(slide, content.get("title", "Features"), theme)
 
-    # Accent underline
+    # Decorative: accent underline
     accent_underline(slide, theme)
 
-    # Feature cards via grid layout
+    # SECONDARY: Feature cards via grid layout
     features = content.get("features", [])[:4]
     if not features:
         return
 
-    positions = Grid.card_layout(len(features), gap=0.4)
+    positions = Grid.card_layout(len(features), gap=Spacing.MD)
     card_y = VLayout.CONTENT_START
     card_h = VLayout.CONTENT_END - card_y
 

@@ -4,6 +4,9 @@ Reusable visual components for slide rendering.
 Each component follows the design system's spacing, typography, and
 alignment rules.  Components use *python-pptx* primitives internally
 and are called from individual layout renderers.
+
+Components accept **grid spans** and **spacing tokens** rather than raw
+coordinates.  They enforce text limits and hierarchy automatically.
 """
 
 from __future__ import annotations
@@ -13,10 +16,12 @@ from pptx.enum.text import PP_ALIGN  # type: ignore
 
 from ppt.generator import add_text_box, hex_to_rgb
 from ppt.design_system import (
+    ContentTransform,
     Grid,
     Spacing,
     Typography,
     VLayout,
+    VStack,
     SLIDE_WIDTH,
     SLIDE_HEIGHT,
 )
@@ -52,14 +57,19 @@ def accent_bar_bottom(slide, theme, *, height: float = 0.12,
 
 
 def accent_underline(slide, theme, *, left: float | None = None,
-                     y: float | None = None, width: float = 1.5,
+                     y: float | None = None,
+                     width: float | None = None,
                      color: str | None = None):
-    """Thin accent underline (typically below a heading)."""
+    """Thin accent underline (typically below a heading).
+
+    Width defaults to 2 grid columns for visual rhythm.
+    """
     _left = left if left is not None else Grid.MARGIN
     _y = y if y is not None else VLayout.ACCENT_Y
+    _w = width if width is not None else Grid.span_width(2)
     c = color or theme.accent
     bar = slide.shapes.add_shape(
-        1, Inches(_left), Inches(_y), Inches(width), Inches(VLayout.ACCENT_HEIGHT),
+        1, Inches(_left), Inches(_y), Inches(_w), Inches(VLayout.ACCENT_HEIGHT),
     )
     bar.fill.solid()
     bar.fill.fore_color.rgb = hex_to_rgb(c)
@@ -67,10 +77,12 @@ def accent_underline(slide, theme, *, left: float | None = None,
     return bar
 
 
-def divider_line(slide, theme, *, y: float = 4.5, width: float = 2.0,
-                 center: bool = True, color: str | None = None):
-    """Thin horizontal divider."""
+def divider_line(slide, theme, *, y: float = 4.5,
+                 span: int = 3, center: bool = True,
+                 color: str | None = None):
+    """Thin horizontal divider spanning *span* grid columns."""
     c = color or theme.accent
+    width = Grid.span_width(span)
     left = (SLIDE_WIDTH - width) / 2 if center else Grid.MARGIN
     bar = slide.shapes.add_shape(
         1, Inches(left), Inches(y), Inches(width), Inches(0.05),
@@ -81,13 +93,16 @@ def divider_line(slide, theme, *, y: float = 4.5, width: float = 2.0,
     return bar
 
 
-def vertical_divider(slide, theme, *, y: float = 1.8, height: float = 4.8,
+def vertical_divider(slide, theme, *, y: float | None = None,
+                     height: float | None = None,
                      color: str | None = None):
     """Vertical divider at the horizontal centre of the slide."""
     c = color or theme.accent
+    _y = y if y is not None else VLayout.CONTENT_START
+    _h = height if height is not None else (VLayout.CONTENT_END - _y)
     x = SLIDE_WIDTH / 2 - 0.03
     div = slide.shapes.add_shape(
-        1, Inches(x), Inches(y), Inches(0.06), Inches(height),
+        1, Inches(x), Inches(_y), Inches(0.06), Inches(_h),
     )
     div.fill.solid()
     div.fill.fore_color.rgb = hex_to_rgb(c)
@@ -99,79 +114,110 @@ def vertical_divider(slide, theme, *, y: float = 1.8, height: float = 4.8,
 # Text Components
 # ======================================================================
 
-def hero_text(slide, text: str, theme, *, y: float = 2.4,
-              color: str | None = None, align=PP_ALIGN.CENTER):
-    """Large hero text — the dominant visual element."""
-    left, width = Grid.center(10)
+def hero_text(slide, text: str, theme, *, y: float | None = None,
+              span: int = 10, color: str | None = None,
+              align=PP_ALIGN.CENTER):
+    """Large hero text — the PRIMARY (dominant) visual element.
+
+    Accepts *span* (grid columns) instead of raw width.
+    Truncates text to enforce readability.
+    """
+    _y = y if y is not None else 2.4
+    left, width = Grid.center(span)
     c = color or theme.primary
+    display = ContentTransform.truncate(text, max_words=15)
     return add_text_box(
-        slide, text,
-        Inches(left), Inches(y), Inches(width), Inches(1.6),
+        slide, display,
+        Inches(left), Inches(_y), Inches(width), Inches(1.6),
         theme.font_heading, Typography.HERO, bold=True,
         color=c, align=align,
     )
 
 
-def heading_block(slide, text: str, theme, *, left: float | None = None,
-                  y: float | None = None, width: float | None = None,
-                  size: int | None = None, color: str | None = None,
+def heading_block(slide, text: str, theme, *,
+                  span: int = 12, offset: int = 0,
+                  y: float | None = None,
+                  size: int | None = None,
+                  color: str | None = None,
                   align=PP_ALIGN.LEFT):
-    """Standard section heading."""
-    _left = left if left is not None else Grid.MARGIN
+    """Standard section heading at HEADING level.
+
+    Accepts *span* and *offset* (grid columns).
+    """
+    left, width = Grid.compute(span, offset)
     _y = y if y is not None else VLayout.TITLE_TOP
-    _w = width if width is not None else Grid.USABLE_WIDTH
     _sz = size or Typography.HEADING
     c = color or theme.primary
+    display = ContentTransform.truncate(text, max_words=12)
     return add_text_box(
-        slide, text,
-        Inches(_left), Inches(_y), Inches(_w), Inches(VLayout.TITLE_HEIGHT),
+        slide, display,
+        Inches(left), Inches(_y), Inches(width), Inches(VLayout.TITLE_HEIGHT),
         theme.font_heading, _sz, bold=True,
         color=c, align=align,
     )
 
 
-def subheading_text(slide, text: str, theme, *, left: float | None = None,
-                    y: float = 1.6, width: float | None = None,
-                    color: str | None = None, align=PP_ALIGN.LEFT):
-    """Secondary heading below the main heading."""
-    _left = left if left is not None else Grid.MARGIN
-    _w = width if width is not None else Grid.USABLE_WIDTH
+def subheading_text(slide, text: str, theme, *,
+                    span: int = 12, offset: int = 0,
+                    y: float | None = None,
+                    color: str | None = None,
+                    align=PP_ALIGN.LEFT):
+    """SECONDARY heading below the main heading."""
+    left, width = Grid.compute(span, offset)
+    _y = y if y is not None else VLayout.ACCENT_Y + Spacing.MD
     c = color or theme.secondary
+    display = ContentTransform.truncate(text, max_words=15)
     return add_text_box(
-        slide, text,
-        Inches(_left), Inches(y), Inches(_w), Inches(0.7),
+        slide, display,
+        Inches(left), Inches(y if y is not None else _y),
+        Inches(width), Inches(0.7),
         theme.font_heading, Typography.SUBHEADING, bold=True,
         color=c, align=align,
     )
 
 
-def body_text(slide, text: str, theme, *, left: float | None = None,
-              y: float = 2.5, width: float | None = None,
-              height: float = 1.5, size: int | None = None,
+def body_text(slide, text: str, theme, *,
+              left: float | None = None, y: float | None = None,
+              width: float | None = None, height: float = 1.5,
+              span: int | None = None, offset: int = 0,
+              size: int | None = None,
               color: str | None = None, align=PP_ALIGN.LEFT):
-    """Standard body text."""
-    _left = left if left is not None else Grid.MARGIN
-    _w = width if width is not None else Grid.USABLE_WIDTH
+    """Standard body text at BODY level.
+
+    Accepts either explicit *left*/*width* OR *span*/*offset* (grid).
+    """
+    if span is not None:
+        _left, _w = Grid.compute(span, offset)
+    else:
+        _left = left if left is not None else Grid.MARGIN
+        _w = width if width is not None else Grid.USABLE_WIDTH
+    _y = y if y is not None else VLayout.CONTENT_START
     _sz = size or Typography.BODY
     c = color or theme.text
     return add_text_box(
         slide, text,
-        Inches(_left), Inches(y), Inches(_w), Inches(height),
+        Inches(_left), Inches(_y), Inches(_w), Inches(height),
         theme.font_body, _sz, bold=False,
         color=c, align=align,
     )
 
 
-def caption_text(slide, text: str, theme, *, left: float | None = None,
-                 y: float = 6.5, width: float | None = None,
+def caption_text(slide, text: str, theme, *,
+                 left: float | None = None, y: float | None = None,
+                 width: float | None = None,
+                 span: int | None = None,
                  color: str | None = None, align=PP_ALIGN.CENTER):
-    """Small caption or source attribution."""
-    _left = left if left is not None else Grid.MARGIN
-    _w = width if width is not None else Grid.USABLE_WIDTH
+    """TERTIARY caption or source attribution."""
+    if span is not None:
+        _left, _w = Grid.center(span)
+    else:
+        _left = left if left is not None else Grid.MARGIN
+        _w = width if width is not None else Grid.USABLE_WIDTH
+    _y = y if y is not None else VLayout.CONTENT_END + Spacing.SM
     c = color or theme.secondary
     return add_text_box(
         slide, text,
-        Inches(_left), Inches(y), Inches(_w), Inches(0.45),
+        Inches(_left), Inches(_y), Inches(_w), Inches(0.45),
         theme.font_body, Typography.CAPTION, bold=False,
         color=c, align=align,
     )
@@ -181,21 +227,31 @@ def caption_text(slide, text: str, theme, *, left: float | None = None,
 # Bullet Group
 # ======================================================================
 
-def bullet_group(slide, items: list[str], theme, *, left: float | None = None,
-                 start_y: float | None = None, width: float | None = None,
+def bullet_group(slide, items: list[str], theme, *,
+                 left: float | None = None, start_y: float | None = None,
+                 width: float | None = None,
+                 span: int | None = None, offset: int = 0,
                  size: int | None = None, gap: float | None = None,
-                 color: str | None = None):
-    """Render a list of bullet points with consistent spacing."""
-    _left = left if left is not None else Grid.MARGIN + Spacing.ELEMENT
+                 color: str | None = None,
+                 max_items: int = 6, max_words: int = 12):
+    """Render a truncated bullet list with consistent spacing."""
+    if span is not None:
+        _left, _w = Grid.compute(span, offset)
+        _left += Spacing.SM
+        _w -= Spacing.SM
+    else:
+        _left = left if left is not None else Grid.MARGIN + Spacing.MD
+        _w = width if width is not None else Grid.USABLE_WIDTH - Spacing.MD
     _y = start_y if start_y is not None else VLayout.CONTENT_START
-    _w = width if width is not None else Grid.USABLE_WIDTH - Spacing.ELEMENT
     _sz = size or Typography.BODY
-    _gap = gap if gap is not None else (Spacing.ELEMENT + Spacing.TIGHT)
+    _gap = gap if gap is not None else Spacing.ELEMENT
     c = color or theme.text
 
+    clean = ContentTransform.truncate_bullets(items, max_items=max_items,
+                                              max_words=max_words)
     boxes = []
-    for i, item in enumerate(items):
-        y_pos = _y + i * _gap
+    for i, item in enumerate(clean):
+        y_pos = _y + i * (0.6 + _gap)
         box = add_text_box(
             slide, f"•  {item}",
             Inches(_left), Inches(y_pos), Inches(_w), Inches(0.6),
@@ -213,7 +269,10 @@ def bullet_group(slide, items: list[str], theme, *, left: float | None = None,
 def card(slide, theme, *, left: float, y: float, width: float,
          height: float, icon: str = "", label: str = "",
          description: str = "", show_accent_strip: bool = False):
-    """Card with optional icon, label, and description."""
+    """Card component with optional icon, label, and description.
+
+    Text is auto-truncated for readability.
+    """
     # Background
     bg = slide.shapes.add_shape(
         1, Inches(left), Inches(y), Inches(width), Inches(height),
@@ -232,10 +291,10 @@ def card(slide, theme, *, left: float, y: float, width: float,
         strip.fill.fore_color.rgb = hex_to_rgb(theme.accent)
         strip.line.fill.background()
 
-    pad = Spacing.TIGHT
+    pad = Spacing.SM
     inner_left = left + pad
     inner_w = width - 2 * pad
-    cur_y = y + Spacing.ELEMENT
+    cur_y = y + Spacing.MD
 
     if icon:
         add_text_box(
@@ -244,21 +303,23 @@ def card(slide, theme, *, left: float, y: float, width: float,
             theme.font_body, Typography.SUBHEADING, bold=False,
             color=theme.accent, align=PP_ALIGN.CENTER,
         )
-        cur_y += 0.6 + pad
+        cur_y += 0.6 + Spacing.SM
 
     if label:
+        display_label = ContentTransform.truncate(label, max_words=6)
         add_text_box(
-            slide, label,
+            slide, display_label,
             Inches(inner_left), Inches(cur_y), Inches(inner_w), Inches(0.6),
             theme.font_heading, Typography.BODY, bold=True,
             color=theme.primary, align=PP_ALIGN.CENTER,
         )
-        cur_y += 0.6 + pad
+        cur_y += 0.6 + Spacing.SM
 
     if description:
         remaining = (y + height) - cur_y - pad
+        display_desc = ContentTransform.truncate(description, max_words=20)
         add_text_box(
-            slide, description,
+            slide, display_desc,
             Inches(inner_left), Inches(cur_y),
             Inches(inner_w), Inches(max(remaining, 0.5)),
             theme.font_body, Typography.CAPTION, bold=False,
@@ -271,29 +332,30 @@ def card(slide, theme, *, left: float, y: float, width: float,
 # ======================================================================
 
 def stat_block(slide, stat: str, label: str, theme, *,
-               left: float | None = None, y: float = 2.2,
-               width: float | None = None):
-    """Large statistic number with label — the dominant element."""
-    if left is None or width is None:
-        _left, _width = Grid.center(10)
-        if left is not None:
-            _left = left
-        if width is not None:
-            _width = width
-    else:
+               y: float | None = None, span: int = 10,
+               left: float | None = None, width: float | None = None):
+    """Large statistic — PRIMARY dominant element.
+
+    Accepts *span* (grid columns) for width.
+    """
+    _y = y if y is not None else VLayout.CONTENT_START
+    if left is not None and width is not None:
         _left, _width = left, width
+    else:
+        _left, _width = Grid.center(span)
 
     # Big number
     add_text_box(
         slide, stat,
-        Inches(_left), Inches(y), Inches(_width), Inches(1.8),
+        Inches(_left), Inches(_y), Inches(_width), Inches(1.8),
         theme.font_heading, Typography.HERO + 12, bold=True,
         color=theme.accent, align=PP_ALIGN.CENTER,
     )
     # Label underneath
+    display_label = ContentTransform.truncate(label, max_words=8)
     add_text_box(
-        slide, label,
-        Inches(_left), Inches(y + 1.8 + Spacing.TIGHT),
+        slide, display_label,
+        Inches(_left), Inches(_y + 1.8 + Spacing.SM),
         Inches(_width), Inches(0.7),
         theme.font_body, Typography.SUBHEADING - 4, bold=False,
         color=theme.secondary, align=PP_ALIGN.CENTER,
@@ -305,14 +367,16 @@ def stat_block(slide, stat: str, label: str, theme, *,
 # ======================================================================
 
 def two_column_headers(slide, left_label: str, right_label: str, theme,
-                       *, y: float = 1.8):
-    """Render column headers and return the column positions."""
-    cols = Grid.columns_layout(2, gap=0.8)
+                       *, y: float | None = None):
+    """Render column headers using Grid.split(6, 6)."""
+    _y = y if y is not None else VLayout.CONTENT_START
+    cols = Grid.split(6, 6)
 
-    for i, label in enumerate((left_label, right_label)):
+    for i, label_text in enumerate((left_label, right_label)):
+        display = ContentTransform.truncate(label_text, max_words=6)
         add_text_box(
-            slide, label,
-            Inches(cols[i][0]), Inches(y),
+            slide, display,
+            Inches(cols[i][0]), Inches(_y),
             Inches(cols[i][1]), Inches(0.7),
             theme.font_heading, Typography.SUBHEADING - 4, bold=True,
             color=theme.primary, align=PP_ALIGN.CENTER,
@@ -325,29 +389,31 @@ def two_column_headers(slide, left_label: str, right_label: str, theme,
 # ======================================================================
 
 def highlight_box(slide, theme, *, label: str, text: str,
-                  y: float = 5.4, height: float = 1.4):
-    """Coloured highlight box with label and body (e.g. key takeaway)."""
+                  y: float | None = None, height: float = 1.4):
+    """Coloured highlight box (e.g. key takeaway) at full grid width."""
+    _y = y if y is not None else VLayout.CONTENT_END - height
     left, width = Grid.full_width()
     bg = slide.shapes.add_shape(
-        1, Inches(left), Inches(y), Inches(width), Inches(height),
+        1, Inches(left), Inches(_y), Inches(width), Inches(height),
     )
     bg.fill.solid()
     bg.fill.fore_color.rgb = hex_to_rgb(theme.primary)
     bg.line.fill.background()
 
-    inner_left = left + Spacing.ELEMENT
-    inner_w = width - 2 * Spacing.ELEMENT
+    inner_left = left + Spacing.MD
+    inner_w = width - 2 * Spacing.MD
 
     add_text_box(
         slide, label,
-        Inches(inner_left), Inches(y + Spacing.TIGHT),
+        Inches(inner_left), Inches(_y + Spacing.SM),
         Inches(inner_w), Inches(0.4),
         theme.font_heading, Typography.CAPTION, bold=True,
         color=theme.background, align=PP_ALIGN.LEFT,
     )
+    display = ContentTransform.truncate(text, max_words=25)
     add_text_box(
-        slide, text,
-        Inches(inner_left), Inches(y + Spacing.TIGHT + 0.45),
+        slide, display,
+        Inches(inner_left), Inches(_y + Spacing.SM + 0.45),
         Inches(inner_w), Inches(height - 0.65),
         theme.font_body, Typography.BODY, bold=False,
         color=theme.background, align=PP_ALIGN.LEFT,
