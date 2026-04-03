@@ -13,6 +13,9 @@ SCHEMAS = {
     "example_slide": '{"title": "...", "example_title": "...", "context": "...", "result": "...", "takeaway": "..."}',
     "conclusion_slide": '{"title": "...", "bullets": ["..."], "key_takeaway": "..."}',
     "cta_slide": '{"title": "...", "cta_text": "...", "contact": "..."}',
+    "quote_slide": '{"quote": "...", "attribution": "..."}',
+    "image_slide": '{"title": "...", "caption": "..."}',
+    "thank_you_slide": '{"title": "Thank You", "message": "...", "contact": "..."}',
 }
 
 async def generate_structured_content(state: PresentationState) -> PresentationState:

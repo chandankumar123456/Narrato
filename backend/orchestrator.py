@@ -6,6 +6,7 @@ from pipeline.slide_planner import plan_slides
 from pipeline.slide_type_assigner import assign_slide_types
 from pipeline.content_structurer import generate_structured_content
 from pipeline.visual_mapper import generate_visual_queries
+from pipeline.speaker_notes_generator import generate_speaker_notes
 from ppt.generator import generate_ppt
 import logging
 
@@ -32,7 +33,11 @@ async def run_pipeline(prompt: str, options: dict = {}) -> str:
     state = await generate_visual_queries(state)
     logger.info(f"[pipeline] Content + images ready")
 
+    state = await generate_speaker_notes(state)
+    logger.info(f"[pipeline] Speaker notes generated for {len(state.speaker_notes or [])} slides")
+
     output_path = generate_ppt(state)
+    state = state.model_copy(update={"output_path": output_path})
     logger.info(f"[pipeline] PPT generated: {output_path}")
 
     return output_path

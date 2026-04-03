@@ -30,8 +30,11 @@ class PresentationState(BaseModel):
     story: Optional[dict] = None
     slide_plan: Optional[list[dict]] = None
     structured_slides: Optional[list[dict]] = None
+    speaker_notes: Optional[list[dict]] = None
     image_queries: Optional[list[str]] = None
     output_path: Optional[str] = None
+    design_theme: Optional[str] = None
+    metadata: Optional[dict] = None
 
     @field_validator("slide_count")
     @classmethod
