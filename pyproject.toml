@@ -1,7 +1,9 @@
 [project]
 name = "narrato"
 version = "0.1.0"
-description = "Add your description here"
+description = "Narrato is an AI-powered storytelling and presentation generator that transforms simple prompts into structured, visually engaging slides and narratives in seconds."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "fastapi>=0.135.3",
+]
