@@ -19,8 +19,9 @@ def render(slide, content: dict, theme, image_path=None):
     bar.line.fill.background()
 
     features = content.get("features", [])[:4]
-    count = len(features) if features else 1
-    cols = min(count, 4)
+    if not features:
+        return
+    cols = min(len(features), 4)
     card_w = 2.6
     gap = 0.35
     total_w = cols * card_w + (cols - 1) * gap

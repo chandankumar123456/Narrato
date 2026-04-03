@@ -20,9 +20,11 @@ def render(slide, content: dict, theme, image_path=None):
 
     # Up to 3 cards
     cards = content.get("cards", [])[:3]
+    if not cards:
+        return
     card_w = 3.5
     gap = 0.5
-    count = len(cards) if cards else 1
+    count = len(cards)
     total_w = count * card_w + (count - 1) * gap
     start_x = (13.33 - total_w) / 2
 
