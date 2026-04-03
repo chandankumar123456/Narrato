@@ -1,47 +1,47 @@
-from pptx.util import Inches, Pt  # type: ignore
+"""Agenda slide — numbered list, title + content layout."""
+
+from pptx.util import Inches  # type: ignore
 from pptx.enum.text import PP_ALIGN  # type: ignore
-from ppt.generator import add_text_box, hex_to_rgb, set_background
+
+from ppt.generator import add_text_box
+from ppt.components import accent_bar_top, accent_underline, heading_block
+from ppt.design_system import (
+    ContentTransform, Grid, Spacing, Typography, VLayout, VStack,
+)
 
 
 def render(slide, content: dict, theme, image_path=None):
-    # Top accent bar
-    bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(0.1))
-    bar.fill.solid()
-    bar.fill.fore_color.rgb = hex_to_rgb(theme.primary)
-    bar.line.fill.background()
+    # Decorative: top accent bar
+    accent_bar_top(slide, theme)
 
-    # Title
-    add_text_box(
-        slide, content.get("title", "Agenda"),
-        Inches(0.8), Inches(0.5), Inches(11.73), Inches(0.9),
-        theme.font_heading, theme.heading_size, bold=True,
-        color=theme.primary, align=PP_ALIGN.LEFT,
+    # PRIMARY: Title heading
+    heading_block(slide, content.get("title", "Agenda"), theme)
+
+    # Decorative: accent underline
+    accent_underline(slide, theme)
+
+    # SECONDARY: Numbered agenda items via VStack flow
+    items = ContentTransform.truncate_bullets(
+        content.get("items", []), max_items=8, max_words=12,
     )
+    num_left, _ = Grid.compute(1, offset=0)
+    text_left, text_width = Grid.compute(10, offset=1)
 
-    # Accent underline
-    underline = slide.shapes.add_shape(
-        1, Inches(0.8), Inches(1.35), Inches(1.5), Inches(0.06),
-    )
-    underline.fill.solid()
-    underline.fill.fore_color.rgb = hex_to_rgb(theme.accent)
-    underline.line.fill.background()
+    flow = VStack(start_y=VLayout.CONTENT_START)
 
-    # Agenda items
-    items = content.get("items", [])
-    start_y = 1.8
     for i, item in enumerate(items):
-        # Number circle
-        num_text = f"{i + 1:02d}"
+        y = flow.next(height=0.6, gap=Spacing.MD if i > 0 else None)
+        # Number label
         add_text_box(
-            slide, num_text,
-            Inches(1.0), Inches(start_y + i * 0.85), Inches(0.6), Inches(0.6),
-            theme.font_heading, 18, bold=True,
+            slide, f"{i + 1:02d}",
+            Inches(num_left), Inches(y), Inches(Grid.span_width(1)), Inches(0.6),
+            theme.font_heading, Typography.BODY, bold=True,
             color=theme.accent, align=PP_ALIGN.CENTER,
         )
         # Item text
         add_text_box(
             slide, item,
-            Inches(1.8), Inches(start_y + i * 0.85), Inches(9.5), Inches(0.6),
-            theme.font_body, 20, bold=False,
+            Inches(text_left), Inches(y), Inches(text_width), Inches(0.6),
+            theme.font_body, Typography.BODY, bold=False,
             color=theme.text, align=PP_ALIGN.LEFT,
         )

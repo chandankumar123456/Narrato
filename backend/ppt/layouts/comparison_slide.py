@@ -1,55 +1,52 @@
-from pptx.util import Inches, Pt  # type: ignore
+"""Comparison slide — TWO-COLUMN layout with Grid.split(6, 6)."""
+
 from pptx.enum.text import PP_ALIGN  # type: ignore
-from ppt.generator import add_text_box, hex_to_rgb, set_background
+
+from ppt.components import (
+    heading_block, vertical_divider, two_column_headers, bullet_group,
+)
+from ppt.design_system import Grid, Spacing, Typography, VLayout
 
 
 def render(slide, content: dict, theme, image_path=None):
-    # Title
-    add_text_box(
-        slide, content.get("title", ""),
-        Inches(0.8), Inches(0.4), Inches(11.73), Inches(0.9),
-        theme.font_heading, theme.heading_size, bold=True,
-        color=theme.primary, align=PP_ALIGN.CENTER,
+    # PRIMARY: Title — centred for comparison slides
+    heading_block(
+        slide, content.get("title", ""), theme,
+        align=PP_ALIGN.CENTER,
     )
 
-    # Central vertical divider
-    divider = slide.shapes.add_shape(
-        1, Inches(6.6), Inches(1.6), Inches(0.06), Inches(5.2),
-    )
-    divider.fill.solid()
-    divider.fill.fore_color.rgb = hex_to_rgb(theme.accent)
-    divider.line.fill.background()
-
-    # --- Left column ---
-    add_text_box(
-        slide, content.get("left_label", ""),
-        Inches(0.8), Inches(1.6), Inches(5.5), Inches(0.7),
-        theme.font_heading, 22, bold=True,
-        color=theme.primary, align=PP_ALIGN.CENTER,
+    # SECONDARY: Column headers via Grid.split(6, 6)
+    header_y = VLayout.CONTENT_START
+    cols = two_column_headers(
+        slide,
+        content.get("left_label", ""),
+        content.get("right_label", ""),
+        theme,
+        y=header_y,
     )
 
+    # Decorative: vertical divider at grid centre
+    vertical_divider(slide, theme, y=header_y)
+
+    # TERTIARY: Left bullet points
+    bullet_y = header_y + 0.7 + Spacing.MD
     left_points = content.get("left_points", [])
-    for i, point in enumerate(left_points):
-        add_text_box(
-            slide, f"•  {point}",
-            Inches(1.2), Inches(2.5 + i * 0.75), Inches(4.8), Inches(0.65),
-            theme.font_body, 16, bold=False,
-            color=theme.text, align=PP_ALIGN.LEFT,
-        )
-
-    # --- Right column ---
-    add_text_box(
-        slide, content.get("right_label", ""),
-        Inches(7.0), Inches(1.6), Inches(5.5), Inches(0.7),
-        theme.font_heading, 22, bold=True,
-        color=theme.primary, align=PP_ALIGN.CENTER,
+    bullet_group(
+        slide, left_points, theme,
+        left=cols[0][0] + Spacing.SM,
+        start_y=bullet_y,
+        width=cols[0][1] - Spacing.SM,
+        size=Typography.BODY,
+        gap=Spacing.SM,
     )
 
+    # TERTIARY: Right bullet points
     right_points = content.get("right_points", [])
-    for i, point in enumerate(right_points):
-        add_text_box(
-            slide, f"•  {point}",
-            Inches(7.4), Inches(2.5 + i * 0.75), Inches(4.8), Inches(0.65),
-            theme.font_body, 16, bold=False,
-            color=theme.text, align=PP_ALIGN.LEFT,
-        )
+    bullet_group(
+        slide, right_points, theme,
+        left=cols[1][0] + Spacing.SM,
+        start_y=bullet_y,
+        width=cols[1][1] - Spacing.SM,
+        size=Typography.BODY,
+        gap=Spacing.SM,
+    )

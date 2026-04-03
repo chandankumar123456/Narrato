@@ -1,49 +1,47 @@
-from pptx.util import Inches, Pt  # type: ignore
+"""Thank You slide — HERO layout with centred messaging."""
+
+from ppt.components import (
+    accent_bar_top, accent_bar_bottom, hero_text, divider_line,
+    body_text, caption_text,
+)
 from pptx.enum.text import PP_ALIGN  # type: ignore
-from ppt.generator import add_text_box, hex_to_rgb, set_background
+
+from ppt.design_system import Grid, Spacing, Typography, VStack
 
 
 def render(slide, content: dict, theme, image_path=None):
-    # Top accent bar
-    bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.33), Inches(0.12))
-    bar.fill.solid()
-    bar.fill.fore_color.rgb = hex_to_rgb(theme.primary)
-    bar.line.fill.background()
+    # Decorative: top accent bar
+    accent_bar_top(slide, theme)
 
-    # Title
-    add_text_box(
-        slide, content.get("title", "Thank You"),
-        Inches(1), Inches(2.2), Inches(11.33), Inches(1.5),
-        theme.font_heading, 48, bold=True,
-        color=theme.primary, align=PP_ALIGN.CENTER,
+    flow = VStack(start_y=Spacing.XXL + Spacing.XL)
+
+    # PRIMARY: Hero title — dominant element
+    y_title = flow.next(height=1.6)
+    hero_text(
+        slide, content.get("title", "Thank You"), theme,
+        y=y_title,
     )
 
-    # Thin accent line
-    line = slide.shapes.add_shape(
-        1, Inches(5.67), Inches(3.8), Inches(2), Inches(0.06),
-    )
-    line.fill.solid()
-    line.fill.fore_color.rgb = hex_to_rgb(theme.accent)
-    line.line.fill.background()
+    # Decorative: centred accent divider
+    y_div = flow.next(height=0.05, gap=Spacing.LG)
+    divider_line(slide, theme, y=y_div, span=3)
 
-    # Message
-    add_text_box(
-        slide, content.get("message", ""),
-        Inches(1.5), Inches(4.2), Inches(10.33), Inches(1.0),
-        theme.font_body, 22, bold=False,
-        color=theme.secondary, align=PP_ALIGN.CENTER,
+    # SECONDARY: Message — 8-col centred
+    y_msg = flow.next(height=1.0, gap=Spacing.MD)
+    left, width = Grid.center(8)
+    body_text(
+        slide, content.get("message", ""), theme,
+        left=left, y=y_msg, width=width, height=1.0,
+        size=Typography.BODY + 2, color=theme.secondary,
+        align=PP_ALIGN.CENTER,
     )
 
-    # Contact
-    add_text_box(
-        slide, content.get("contact", ""),
-        Inches(1.5), Inches(5.5), Inches(10.33), Inches(0.6),
-        theme.font_body, 16, bold=False,
-        color=theme.text, align=PP_ALIGN.CENTER,
+    # TERTIARY: Contact
+    y_contact = flow.next(height=0.45, gap=Spacing.LG)
+    caption_text(
+        slide, content.get("contact", ""), theme,
+        y=y_contact, color=theme.text,
     )
 
-    # Bottom accent bar
-    bar2 = slide.shapes.add_shape(1, Inches(0), Inches(7.35), Inches(13.33), Inches(0.15))
-    bar2.fill.solid()
-    bar2.fill.fore_color.rgb = hex_to_rgb(theme.accent)
-    bar2.line.fill.background()
+    # Decorative: bottom accent bar
+    accent_bar_bottom(slide, theme)
