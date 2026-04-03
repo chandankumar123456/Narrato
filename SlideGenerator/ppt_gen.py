@@ -1,5 +1,5 @@
 import os
-from pptx import Presentation
+from pptx import Presentation # type: ignore
 
 def create_ppt(slides_data, file_path):
     # Ensure directory exists
