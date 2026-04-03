@@ -35,7 +35,9 @@ async def call_llm(system_prompt: str, user_prompt: str) -> str:
                     await asyncio.sleep(wait)
                 else:
                     logger.error("LLM call failed after %d attempts: %s", MAX_RETRIES, exc)
-        raise last_exc  # type: ignore[misc]
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("LLM call failed with no retries configured")
 
 
 async def _call_llm_raw(system_prompt: str, user_prompt: str) -> str:

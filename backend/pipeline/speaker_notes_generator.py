@@ -54,7 +54,7 @@ Return a JSON object: {{"notes": [{{"slide_id": 1, "notes": "..."}}, ...]}}
     try:
         result = await call_llm_json(system_prompt, user_prompt)
         notes = result.get("notes", [])
-    except Exception:
+    except (ValueError, KeyError):
         logger.exception("Failed to generate speaker notes")
         notes = [
             {"slide_id": s["slide_id"], "notes": ""}
