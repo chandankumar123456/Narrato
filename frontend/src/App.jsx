@@ -1,121 +1,72 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState } from "react";
+import { generatePresentation, pollStatus, downloadUrl } from "./api/narrato";
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [prompt, setPrompt] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | processing | done | error
+  const [jobId, setJobId] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function handleGenerate() {
+    if (!prompt.trim()) return;
+    setStatus("processing");
+    setError(null);
+
+    try {
+      const { job_id } = await generatePresentation(prompt);
+      setJobId(job_id);
+      await poll(job_id);
+    } catch (e) {
+      setStatus("error");
+      setError("Generation failed. Please try again.");
+    }
+  }
+
+  async function poll(id) {
+    const interval = setInterval(async () => {
+      const data = await pollStatus(id);
+      if (data.status === "completed") {
+        clearInterval(interval);
+        setStatus("done");
+      } else if (data.status === "failed") {
+        clearInterval(interval);
+        setStatus("error");
+        setError(data.error);
+      }
+    }, 2000);
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div style={{ maxWidth: 640, margin: "80px auto", fontFamily: "sans-serif" }}>
+      <h1>Narrato</h1>
+      <p>Describe your presentation and we'll build it.</p>
 
-      <div className="ticks"></div>
+      <textarea
+        rows={4} style={{ width: "100%", fontSize: 16, padding: 12 }}
+        placeholder="e.g. 12-slide pitch deck for an AI healthcare startup targeting hospital CTOs"
+        value={prompt}
+        onChange={e => setPrompt(e.target.value)}
+      />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <button
+        onClick={handleGenerate}
+        disabled={status === "processing"}
+        style={{ marginTop: 12, padding: "10px 24px", fontSize: 16, cursor: "pointer" }}
+      >
+        {status === "processing" ? "Generating..." : "Generate Presentation"}
+      </button>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {status === "processing" && <p>⏳ Building your deck... this takes ~30 seconds</p>}
+
+      {status === "done" && (
+        <a href={downloadUrl(jobId)} download>
+          <button style={{ marginTop: 16, padding: "10px 24px", background: "#6C63FF", color: "#fff", border: "none", cursor: "pointer", fontSize: 16 }}>
+            ⬇ Download .pptx
+          </button>
+        </a>
+      )}
+
+      {status === "error" && <p style={{ color: "red" }}>❌ {error}</p>}
+    </div>
+  );
 }
-
-export default App
