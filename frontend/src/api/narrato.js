@@ -14,3 +14,12 @@ export async function pollStatus(jobId) {
 export function downloadUrl(jobId) {
   return `${BASE}/download/${jobId}`;
 }
+
+export async function requestPreview(jobId) {
+  const { data } = await axios.post(`${BASE}/preview/${jobId}`);
+  return data;
+}
+
+export function previewImageUrl(path) {
+  return `${BASE}${path}`;
+}
