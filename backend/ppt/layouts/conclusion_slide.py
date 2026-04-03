@@ -24,8 +24,8 @@ def render(slide, content: dict, theme, image_path=None):
     # SECONDARY: Key takeaway highlight box via VStack overflow check
     takeaway = content.get("key_takeaway", "")
     if takeaway:
-        # Calculate where bullets end
-        bullet_end = VLayout.CONTENT_START + len(bullets) * (0.6 + Spacing.MD)
+        # Calculate where bullets end using shared item height constant
+        bullet_end = VLayout.CONTENT_START + len(bullets) * (VStack.ITEM_HEIGHT + Spacing.MD)
         box_y = max(bullet_end + Spacing.LG, VLayout.CONTENT_END - 1.4)
         # Ensure it doesn't exceed bottom limit
         box_y = min(box_y, VLayout.CONTENT_END - 1.3)

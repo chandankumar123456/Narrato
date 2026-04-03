@@ -33,6 +33,7 @@ def render(slide, content: dict, theme, image_path=None):
 
     # Sizing from grid:  wider labels when fewer events
     dot_size = Spacing.MD + Spacing.XS      # 0.375"
+    # Wider labels for fewer events (2 cols), narrower for many (1 col + gutter)
     label_w = Grid.span_width(2) if count <= 4 else Grid.span_width(1) + Grid.GUTTER
 
     for i, event in enumerate(events):

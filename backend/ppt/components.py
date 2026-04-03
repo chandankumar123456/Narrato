@@ -278,8 +278,7 @@ def card(slide, theme, *, left: float, y: float, width: float,
         1, Inches(left), Inches(y), Inches(width), Inches(height),
     )
     bg.fill.solid()
-    surface = getattr(theme, "surface", None) or theme.background
-    bg.fill.fore_color.rgb = hex_to_rgb(surface)
+    bg.fill.fore_color.rgb = hex_to_rgb(theme.surface)
     bg.line.color.rgb = hex_to_rgb(theme.secondary)
     bg.line.width = Pt(1)
 

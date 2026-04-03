@@ -257,9 +257,12 @@ class VStack:
         remaining = flow.remaining()         # how much vertical space is left
     """
 
+    # Standard height for a single bullet/text row, shared with bullet_group
+    ITEM_HEIGHT: float = 0.6
+
     def __init__(self, start_y: float | None = None):
         self._y = start_y if start_y is not None else VLayout.CONTENT_START
-        self._initial = self._y
+        self._start_y = self._y
 
     @property
     def y(self) -> float:
@@ -274,7 +277,7 @@ class VStack:
         if gap is None:
             gap = Spacing.ELEMENT
         # On the very first call, don't add a gap
-        if self._y == self._initial:
+        if self._y == self._start_y:
             y = self._y
         else:
             y = self._y + gap
@@ -293,7 +296,7 @@ class VStack:
     def fits(self, height: float, gap: float | None = None) -> bool:
         """Check if an element of *height* fits without overflow."""
         g = gap if gap is not None else Spacing.ELEMENT
-        needed = g + height if self._y != self._initial else height
+        needed = g + height if self._y != self._start_y else height
         return self.remaining() >= needed
 
 
