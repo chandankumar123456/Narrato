@@ -1,5 +1,5 @@
 from models.presentation_state import PresentationState
-from services.llm_client import call_llm_json
+from services.llm_client import call_llm_json_list
 from services.image_service import fetch_image
 import asyncio
 
@@ -23,9 +23,7 @@ Generate one image query per slide below:
 Return: ["query1", "query2", ...]
 """
     try:
-        queries = await call_llm_json(system, user)
-        if not isinstance(queries, list):
-            queries = []
+        queries = await call_llm_json_list(system, user)
     except Exception:
         queries = [state.topic] * len(slides_needing_images)
 

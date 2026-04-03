@@ -42,6 +42,8 @@ async def call_llm(system_prompt: str, user_prompt: str) -> str:
 
 async def _call_llm_raw(system_prompt: str, user_prompt: str) -> str:
     if settings.llm_provider == "openai":
+        if not settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY is not configured. Set it in your .env file.")
         from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=settings.openai_api_key)
         response = await client.chat.completions.create(
@@ -55,6 +57,8 @@ async def _call_llm_raw(system_prompt: str, user_prompt: str) -> str:
         return response.choices[0].message.content
 
     elif settings.llm_provider == "anthropic":
+        if not settings.anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY is not configured. Set it in your .env file.")
         import anthropic
         client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         message = await client.messages.create(

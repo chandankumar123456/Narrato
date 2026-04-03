@@ -2,7 +2,7 @@
 Celery worker for Narrato pipeline execution.
 
 Usage:
-    celery -A worker.celery_app worker --loglevel=info
+    cd backend && celery -A worker.celery_app worker --loglevel=info
 
 The worker picks up presentation generation jobs from the Redis broker,
 runs the full pipeline, and stores results back in the job store.
@@ -10,6 +10,14 @@ runs the full pipeline, and stores results back in the job store.
 
 import asyncio
 import logging
+import os
+import sys
+
+# Ensure the backend directory is in sys.path so that forked worker
+# processes can resolve imports (services, orchestrator, config, etc.).
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
 
 from celery import Celery
 from config import settings
@@ -50,13 +58,22 @@ def _run_async(coro):
                  default_retry_delay=10)
 def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
     """Celery task that executes the full Narrato pipeline."""
+    # Ensure backend dir is in path for forked worker processes
+    import os, sys
+    _bd = os.path.dirname(os.path.abspath(__file__))
+    if _bd not in sys.path:
+        sys.path.insert(0, _bd)
+
     from services.job_store import set_job, update_job
 
     try:
-        update_job(job_id, status="processing", progress=10)
+        update_job(job_id, status="processing", progress=5)
+
+        def _progress(pct: int):
+            update_job(job_id, progress=pct)
 
         from orchestrator import run_pipeline
-        output_path = _run_async(run_pipeline(prompt, options))
+        output_path = _run_async(run_pipeline(prompt, options, progress_callback=_progress))
 
         set_job(job_id, status="completed", path=output_path, progress=100)
         logger.info("[celery] Job %s completed: %s", job_id, output_path)

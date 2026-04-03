@@ -1,4 +1,4 @@
-import uuid, asyncio, os, logging, glob, subprocess
+import uuid, asyncio, os, logging, glob, subprocess, traceback
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,6 +46,20 @@ class StatusResponse(BaseModel):
     error: Optional[str] = None
 
 
+class ErrorResponse(BaseModel):
+    error: str
+    detail: Optional[str] = None
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.exception("Unhandled exception: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error", "detail": str(exc)},
+    )
+
+
 def _try_celery() -> bool:
     """Check if Celery workers are reachable."""
     try:
@@ -58,6 +72,11 @@ def _try_celery() -> bool:
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate(req: GenerateRequest, background_tasks: BackgroundTasks):
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty")
+    if len(req.prompt) > 5000:
+        raise HTTPException(status_code=400, detail="Prompt exceeds maximum length of 5000 characters")
+
     job_id = uuid.uuid4().hex
     set_job(job_id, status="queued", progress=0)
 
@@ -76,8 +95,12 @@ async def generate(req: GenerateRequest, background_tasks: BackgroundTasks):
 async def _run_job(job_id: str, prompt: str, options: dict):
     """Fallback: run pipeline directly in a background task."""
     try:
-        update_job(job_id, status="processing", progress=10)
-        path = await run_pipeline(prompt, options)
+        update_job(job_id, status="processing", progress=5)
+
+        def _progress(pct: int):
+            update_job(job_id, progress=pct)
+
+        path = await run_pipeline(prompt, options, progress_callback=_progress)
         set_job(job_id, status="completed", path=path, progress=100)
     except Exception as e:
         logger.exception("[api] Job %s failed", job_id)
