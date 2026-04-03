@@ -11,6 +11,10 @@ PURPOSE_TO_TYPE = {
     "timeline": "timeline_slide",
     "example": "example_slide",
     "summary": "conclusion_slide",
+    "quote": "quote_slide",
+    "image": "image_slide",
+    "thank you": "thank_you_slide",
+    "agenda": "agenda_slide",
 }
 
 SECTION_DEFAULTS = {

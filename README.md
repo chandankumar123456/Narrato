@@ -35,6 +35,7 @@
 26. [Advanced Extensions (Post-MVP)](#26-advanced-extensions-post-mvp)
 27. [Testing Strategy](#27-testing-strategy)
 28. [Deployment Notes](#28-deployment-notes)
+29. [Technical Documentation](#29-technical-documentation)
 
 ---
 
@@ -1080,4 +1081,850 @@ services:
 
 ---
 
-*Last updated: Architecture v2 — Complete, corrected, and production-ready.*
+*Last updated: Architecture v3 — Production-grade, fully implemented.*
+
+---
+
+## 29. Technical Documentation
+
+> **Complete developer guide for setting up, running, and understanding the Narrato system.**
+> This project uses **uv** as the Python package manager for the backend.
+
+---
+
+### 29.1 Project Structure (Production)
+
+```
+narrato/
+├── backend/
+│   ├── main.py                          # FastAPI app — API endpoints, CORS, job management
+│   ├── orchestrator.py                  # Pipeline controller — runs all steps in sequence
+│   ├── config.py                        # Pydantic Settings — env-based configuration
+│   ├── worker.py                        # Celery worker — async job execution via Redis
+│   │
+│   ├── models/
+│   │   └── presentation_state.py        # PresentationState — Pydantic state model
+│   │
+│   ├── pipeline/
+│   │   ├── prompt_understanding.py      # Step 1: LLM extracts signals from prompt
+│   │   ├── state_builder.py             # Step 2: Build PresentationState from signals
+│   │   ├── state_completion.py          # Step 3: LLM fills missing state fields
+│   │   ├── story_generator.py           # Step 4: LLM creates narrative arc
+│   │   ├── slide_planner.py             # Step 5: Distribute slides across sections
+│   │   ├── slide_type_assigner.py       # Step 6: Map each slide to a layout type
+│   │   ├── content_structurer.py        # Step 7: LLM generates structured JSON per slide
+│   │   ├── visual_mapper.py             # Step 8: LLM generates image queries + fetch
+│   │   └── speaker_notes_generator.py   # Step 9: LLM generates speaker notes per slide
+│   │
+│   ├── ppt/
+│   │   ├── generator.py                 # PPT engine — renders slides, injects notes
+│   │   ├── layouts/                     # 14 slide layout renderers
+│   │   │   ├── title_slide.py
+│   │   │   ├── section_header.py
+│   │   │   ├── agenda_slide.py
+│   │   │   ├── problem_slide.py
+│   │   │   ├── stats_slide.py
+│   │   │   ├── feature_slide.py
+│   │   │   ├── comparison_slide.py
+│   │   │   ├── timeline_slide.py
+│   │   │   ├── example_slide.py
+│   │   │   ├── quote_slide.py
+│   │   │   ├── image_slide.py
+│   │   │   ├── conclusion_slide.py
+│   │   │   ├── cta_slide.py
+│   │   │   └── thank_you_slide.py
+│   │   └── themes/
+│   │       └── modern.py                # Theme configs: modern, corporate, minimal
+│   │
+│   ├── services/
+│   │   ├── llm_client.py                # LLM wrapper — retry, rate limit, JSON parsing
+│   │   ├── image_service.py             # Image fetching — Unsplash/Pexels with fallback
+│   │   └── job_store.py                 # Redis-backed job store (in-memory fallback)
+│   │
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx                      # Main UI — prompt, options, progress, preview
+│   │   ├── main.jsx                     # React entry point
+│   │   ├── index.css                    # Global styles
+│   │   ├── App.css                      # Component styles
+│   │   └── api/
+│   │       └── narrato.js               # Axios API client
+│   ├── package.json
+│   └── vite.config.js
+│
+├── pyproject.toml                       # uv project config + dependencies
+├── uv.lock                             # uv lock file
+├── main.py                             # Root entry point (placeholder)
+└── README.md
+```
+
+---
+
+### 29.2 Prerequisites
+
+| Tool | Version | Purpose |
+|---|---|---|
+| **Python** | 3.11+ | Backend runtime |
+| **uv** | latest | Python package manager (replaces pip) |
+| **Node.js** | 18+ | Frontend build tool |
+| **Redis** | 7+ | Job queue broker + result store |
+| **LibreOffice** | 7+ | Slide preview generation (headless) |
+| **poppler-utils** | latest | Optional: PDF → PNG conversion for previews |
+
+---
+
+### 29.3 Setup & Installation
+
+#### Backend (using uv)
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# From the project root
+cd narrato/
+
+# Install all Python dependencies via uv
+uv sync
+
+# Create .env file from template
+cp .env.example .env
+# Edit .env with your API keys (see section 29.4)
+```
+
+#### Frontend
+
+```bash
+cd frontend/
+npm install
+```
+
+#### Redis (required for production, optional for dev)
+
+```bash
+# macOS
+brew install redis && brew services start redis
+
+# Ubuntu/Debian
+sudo apt-get install redis-server
+sudo systemctl start redis
+
+# Docker
+docker run -d --name redis -p 6379:6379 redis:7-alpine
+```
+
+#### LibreOffice (for preview generation)
+
+```bash
+# macOS
+brew install --cask libreoffice
+
+# Ubuntu/Debian
+sudo apt-get install libreoffice poppler-utils
+
+# Docker (included in production Dockerfile)
+```
+
+---
+
+### 29.4 Environment Configuration
+
+Create a `.env` file in the project root:
+
+```env
+# ──── LLM Provider ────
+LLM_PROVIDER=openai                     # "openai" | "anthropic"
+OPENAI_API_KEY=sk-...                   # Required if LLM_PROVIDER=openai
+ANTHROPIC_API_KEY=sk-ant-...            # Required if LLM_PROVIDER=anthropic
+LLM_MODEL=gpt-4o-mini                   # or "claude-3-5-sonnet-20241022"
+
+# ──── Image APIs (optional) ────
+IMAGE_PROVIDER=unsplash                  # "unsplash" | "pexels" | "none"
+UNSPLASH_ACCESS_KEY=...                  # Get from unsplash.com/developers
+PEXELS_API_KEY=...                       # Get from pexels.com/api
+
+# ──── Storage ────
+OUTPUT_DIR=./outputs                     # Directory for generated files
+FILE_RETENTION_SECONDS=3600              # Auto-cleanup after 1 hour
+
+# ──── Redis ────
+REDIS_URL=redis://localhost:6379/0       # Redis connection string
+```
+
+---
+
+### 29.5 Running the Application
+
+#### Development Mode (no Redis/Celery required)
+
+```bash
+# Terminal 1: Backend
+cd backend/
+uv run uvicorn main:app --reload --port 8000
+
+# Terminal 2: Frontend
+cd frontend/
+npm run dev
+```
+
+The backend will automatically fall back to in-memory job storage and `asyncio` background tasks when Redis/Celery are unavailable.
+
+**Access the app at:** http://localhost:5173
+
+#### Production Mode (Redis + Celery)
+
+```bash
+# Terminal 1: Redis
+redis-server
+
+# Terminal 2: Celery worker
+cd backend/
+uv run celery -A worker.celery_app worker --loglevel=info --concurrency=4
+
+# Terminal 3: Backend API
+cd backend/
+uv run uvicorn main:app --host 0.0.0.0 --port 8000
+
+# Terminal 4: Frontend (or build for production)
+cd frontend/
+npm run build
+npm run preview
+```
+
+#### Docker Compose (Full Stack)
+
+```yaml
+# docker-compose.yml
+services:
+  backend:
+    build: ./backend
+    ports: ["8000:8000"]
+    env_file: .env
+    depends_on: [redis]
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    build: ./backend
+    env_file: .env
+    depends_on: [redis]
+    command: celery -A worker.celery_app worker --loglevel=info --concurrency=4
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  frontend:
+    build: ./frontend
+    ports: ["3000:3000"]
+    depends_on: [backend]
+```
+
+---
+
+### 29.6 API Reference
+
+#### `POST /generate`
+
+Start a new presentation generation job.
+
+**Request:**
+```json
+{
+  "prompt": "12-slide pitch deck for an AI diagnostics startup",
+  "options": {
+    "slide_count": 12,
+    "tone": "professional",
+    "visual_style": "modern",
+    "image_preference": true
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "job_id": "a1b2c3d4e5f6",
+  "status": "queued",
+  "estimated_seconds": 30
+}
+```
+
+#### `GET /status/{job_id}`
+
+Poll for job status and progress.
+
+**Response (processing):**
+```json
+{
+  "job_id": "a1b2c3d4e5f6",
+  "status": "processing",
+  "progress": 40
+}
+```
+
+**Response (completed):**
+```json
+{
+  "job_id": "a1b2c3d4e5f6",
+  "status": "completed",
+  "progress": 100,
+  "download_url": "/download/a1b2c3d4e5f6",
+  "preview_urls": ["/previews/a1b2c3d4e5f6/slide-1.png", "..."]
+}
+```
+
+**Response (failed):**
+```json
+{
+  "job_id": "a1b2c3d4e5f6",
+  "status": "failed",
+  "error": "LLM call failed after 3 attempts"
+}
+```
+
+#### `GET /download/{job_id}`
+
+Download the generated `.pptx` file.
+
+#### `POST /preview/{job_id}`
+
+Trigger slide preview image generation (LibreOffice headless). Preview images are served from `/previews/{job_id}/`.
+
+#### `GET /health`
+
+Health check with dependency status.
+
+```json
+{
+  "status": "ok",
+  "version": "2.0.0",
+  "redis": "connected",
+  "celery": "connected"
+}
+```
+
+---
+
+### 29.7 Full Pipeline Architecture
+
+```
+User Input
+    │
+    ▼
+[1] Prompt Understanding (LLM)
+    │  → Extract: topic, tone, audience, slide_count, sections
+    │
+    ▼
+[2] State Builder
+    │  → Create PresentationState (Pydantic model)
+    │
+    ▼
+[3] State Completion (LLM)
+    │  → Fill missing fields via inference
+    │
+    ▼
+[4] Story Generation (LLM)
+    │  → Create narrative arc: hook, sections_flow, call_to_action
+    │
+    ▼
+[5] Slide Planning
+    │  → Weighted distribution across sections
+    │
+    ▼
+[6] Slide Type Assignment
+    │  → Map each slide to one of 14 layout types
+    │
+    ▼
+[7] Content Structuring (LLM)
+    │  → Generate JSON content per slide matching type schema
+    │
+    ▼
+[8] Visual Mapping (LLM + API)
+    │  → Generate image queries → fetch from Unsplash/Pexels
+    │
+    ▼
+[9] Speaker Notes Generation (LLM)
+    │  → Generate 3-5 sentence notes per slide
+    │
+    ▼
+[10] PPT Generation (python-pptx)
+    │  → Render all slides with themed layouts
+    │  → Inject speaker notes into notes pages
+    │
+    ▼
+.pptx File → Download / Preview
+```
+
+**Total LLM calls per presentation: 5-6**
+
+| Step | LLM Call | Purpose |
+|---|---|---|
+| Prompt Understanding | Call 1 | Extract intent signals from prompt |
+| State Completion | Call 2 | Fill missing state fields |
+| Story Generation | Call 3 | Build narrative arc |
+| Content Structuring | Call 4 (per slide) | Generate structured slide content |
+| Visual Mapping | Call 5 | Generate image search queries |
+| Speaker Notes | Call 6 | Generate speaker notes per slide |
+
+---
+
+### 29.8 Slide Layout System
+
+All 14 implemented slide types:
+
+| # | Slide Type | Layout | Content Schema |
+|---|---|---|---|
+| 1 | `title_slide` | Centered + accent bars | `{title, subtitle, presenter}` |
+| 2 | `section_header` | Centered + thin accent line | `{section_title, tagline}` |
+| 3 | `agenda_slide` | Numbered item list | `{title, items[]}` |
+| 4 | `problem_slide` | 3-card horizontal | `{title, cards[{icon, label, description}]}` |
+| 5 | `stats_slide` | Large hero stat | `{title, stat, stat_label, description, source}` |
+| 6 | `feature_slide` | Feature grid | `{title, features[{icon, label, description}]}` |
+| 7 | `comparison_slide` | Two-column split | `{title, left_label, left_points[], right_label, right_points[]}` |
+| 8 | `timeline_slide` | Horizontal flow + dots | `{title, events[{year, label}]}` |
+| 9 | `example_slide` | Case study layout | `{title, example_title, context, result, takeaway}` |
+| 10 | `quote_slide` | Full-bleed quote | `{quote, attribution}` |
+| 11 | `image_slide` | Full image + overlay | `{title, caption}` |
+| 12 | `conclusion_slide` | Bullets + takeaway box | `{title, bullets[], key_takeaway}` |
+| 13 | `cta_slide` | Bold CTA + contact | `{title, cta_text, contact}` |
+| 14 | `thank_you_slide` | Closing slide | `{title, message, contact}` |
+
+---
+
+### 29.9 Job Processing System
+
+#### Architecture
+
+```
+Frontend → POST /generate → FastAPI
+                              │
+                   ┌──────────┴──────────┐
+                   │                     │
+              [Celery available]   [No Celery]
+                   │                     │
+                   ▼                     ▼
+            Redis Queue          asyncio BackgroundTask
+                   │                     │
+                   ▼                     │
+            Celery Worker                │
+                   │                     │
+                   └──────────┬──────────┘
+                              │
+                        Run Pipeline
+                              │
+                              ▼
+                     Redis Job Store
+                     (or in-memory)
+                              │
+                              ▼
+                   Frontend polls /status
+```
+
+#### Job Store (Redis)
+
+Jobs are stored in Redis with a 24-hour TTL:
+
+```
+Key: narrato:job:{job_id}
+Value: {
+  "status": "queued|processing|completed|failed",
+  "path": "/outputs/abc123.pptx",
+  "error": null,
+  "progress": 0-100,
+  "preview_urls": ["/previews/{id}/slide-1.png", ...]
+}
+```
+
+When Redis is unavailable, the system falls back to an in-memory dictionary.
+
+#### Celery Configuration
+
+```python
+celery_app = Celery("narrato", broker=REDIS_URL, backend=REDIS_URL)
+# Task: narrato.generate_presentation
+# Retries: 2 (with 10s delay)
+# Soft time limit: 120s
+# Hard time limit: 180s
+```
+
+---
+
+### 29.10 LLM Service
+
+The LLM client (`services/llm_client.py`) provides:
+
+| Feature | Detail |
+|---|---|
+| **Providers** | OpenAI (GPT-4o, GPT-4o-mini) and Anthropic (Claude 3.5 Sonnet) |
+| **Retry** | 3 attempts with exponential backoff (1s, 2s, 4s) |
+| **Rate Limiting** | `asyncio.Semaphore(3)` — max 3 concurrent LLM calls |
+| **JSON Parsing** | Strips markdown code fences before parsing |
+| **Validation** | `call_llm_json()` enforces dict, `call_llm_json_list()` enforces list |
+
+---
+
+### 29.11 Speaker Notes
+
+Speaker notes are generated as a dedicated pipeline step after content structuring.
+
+For each slide, the LLM generates 3–5 sentences that:
+- Explain key points shown on the slide
+- Add context not visible on the slide itself
+- Suggest transition phrases to the next slide
+- Match the presentation's tone and audience
+
+Notes are injected into the `.pptx` file via `python-pptx`'s `slide.notes_slide.notes_text_frame`.
+
+---
+
+### 29.12 Preview System
+
+The preview system converts generated `.pptx` files into slide thumbnail images.
+
+**Flow:**
+1. `POST /preview/{job_id}` triggers conversion
+2. LibreOffice headless converts `.pptx` → PDF
+3. `pdftoppm` (poppler-utils) converts PDF → PNG images
+4. Images served as static files from `/previews/{job_id}/`
+5. URLs stored in job store and returned via `/status/{job_id}`
+
+**Requirements:**
+- `libreoffice` must be installed and available in PATH
+- `poppler-utils` for PDF → PNG (optional, falls back to LibreOffice PNG export)
+
+---
+
+### 29.13 Theme System
+
+Three built-in themes control colors, fonts, and sizing across all 14 slide layouts:
+
+| Theme | Primary | Secondary | Accent | Font |
+|---|---|---|---|---|
+| **modern** | `#6C63FF` (purple) | `#A29BFE` | `#FD79A8` (pink) | Calibri |
+| **corporate** | `#1A3C5E` (navy) | `#2E75B6` | `#E8A020` (gold) | Calibri |
+| **minimal** | `#2D2D2D` (charcoal) | `#888888` | `#000000` | Calibri |
+
+Themes are defined in `backend/ppt/themes/modern.py` as `ThemeConfig` dataclass instances.
+
+---
+
+### 29.14 Frontend
+
+The React (Vite) frontend provides:
+
+| Feature | Description |
+|---|---|
+| **Prompt Input** | Textarea for natural language description |
+| **Options Panel** | Slide count slider, tone selector, visual style, image toggle |
+| **Progress Bar** | Real-time progress percentage with animated bar |
+| **Preview Thumbnails** | Grid of slide images (when preview system is available) |
+| **Download Button** | Direct `.pptx` download |
+| **Error Handling** | User-friendly error messages with retry option |
+| **Reset** | "Create another presentation" to start over |
+
+---
+
+### 29.15 uv Package Manager Reference
+
+This project uses [**uv**](https://docs.astral.sh/uv/) for Python dependency management.
+
+```bash
+# Install dependencies
+uv sync
+
+# Add a new dependency
+uv add <package-name>
+
+# Remove a dependency
+uv remove <package-name>
+
+# Run a command in the virtual environment
+uv run <command>
+
+# Run the FastAPI server
+uv run uvicorn backend.main:app --reload --port 8000
+
+# Run the Celery worker
+uv run celery -A backend.worker.celery_app worker --loglevel=info
+
+# Run tests
+uv run pytest
+
+# Update lock file
+uv lock
+```
+
+**Key files:**
+- `pyproject.toml` — Project metadata + dependency declarations
+- `uv.lock` — Deterministic lock file (committed to git)
+- `.python-version` — Pinned Python version for uv
+
+---
+
+### 29.16 Dependencies
+
+#### Python (via `pyproject.toml`)
+
+| Package | Version | Purpose |
+|---|---|---|
+| `fastapi` | ≥0.135 | REST API framework |
+| `uvicorn[standard]` | ≥0.42 | ASGI server |
+| `pydantic` | ≥2.12 | Data validation & state model |
+| `pydantic-settings` | ≥2.13 | Environment-based settings |
+| `python-pptx` | ≥1.0 | PowerPoint file generation |
+| `openai` | ≥2.30 | OpenAI API client |
+| `httpx` | ≥0.28 | Async HTTP client |
+| `celery` | ≥5.6 | Distributed task queue |
+| `redis` | ≥7.4 | Redis client for job store & broker |
+| `pillow` | ≥12.2 | Image processing |
+| `requests` | ≥2.33 | HTTP requests |
+| `python-dotenv` | ≥1.2 | .env file loading |
+| `pytest` | ≥9.0 | Testing framework |
+| `pytest-asyncio` | ≥1.3 | Async test support |
+
+#### Frontend (via `package.json`)
+
+| Package | Version | Purpose |
+|---|---|---|
+| `react` | ^19.2 | UI framework |
+| `react-dom` | ^19.2 | React DOM renderer |
+| `axios` | ^1.14 | HTTP client |
+| `vite` | ^8.0 | Build tool & dev server |
+
+---
+
+### 29.17 Troubleshooting
+
+| Issue | Solution |
+|---|---|
+| `OPENAI_API_KEY not set` | Create `.env` file with your API key |
+| Redis connection refused | Start Redis: `redis-server` or use Docker |
+| Celery not picking up tasks | Ensure Redis is running; check `REDIS_URL` in `.env` |
+| Preview images not generated | Install `libreoffice` and `poppler-utils` |
+| Frontend can't reach backend | Check CORS origins in `backend/main.py` |
+| LLM returns invalid JSON | The retry system handles this automatically (3 attempts) |
+| `uv sync` fails | Ensure Python ≥3.11 and uv is installed |
+
+---
+
+## 30. Production Architecture
+
+### State-Driven Pipeline
+
+Narrato uses a **state-driven pipeline** where a single `PresentationState` Pydantic model flows through every stage. Each stage reads the current state, performs its transformation, and returns an updated copy. This guarantees:
+
+- **Reproducibility** — the same state always produces the same output
+- **Testability** — each stage can be tested in isolation
+- **Traceability** — you can inspect the state at any point in the pipeline
+
+The full pipeline executes **10 sequential stages**:
+
+```
+User Prompt
+  → 1. Prompt Understanding  (LLM extracts topic, type, tone, audience)
+  → 2. State Builder          (creates PresentationState from signals)
+  → 3. State Completion        (LLM fills missing fields)
+  → 4. Story Generator         (LLM creates narrative arc + emotional flow)
+  → 5. Slide Planner           (distributes slides across sections by weight)
+  → 6. Slide Type Assigner     (maps each slide to one of 14 layout types)
+  → 7. Content Structurer      (LLM generates typed JSON content per slide)
+  → 8. Visual Mapper           (LLM generates image queries, fetches images)
+  → 9. Speaker Notes Generator (LLM writes 3–5 sentences per slide)
+  → 10. PPT Generator          (python-pptx renders .pptx with themes)
+```
+
+Each LLM stage uses retry logic (3 attempts with exponential backoff) and graceful fallbacks to ensure the pipeline never crashes from transient failures.
+
+### Redis + Celery Workflow
+
+Narrato uses **Redis** as both the job store and the Celery message broker. The async workflow operates as follows:
+
+```
+Frontend (React)
+   │
+   ├── POST /generate  ──→  FastAPI creates job in Redis (status: "queued")
+   │                         │
+   │                         ├── If Celery available: enqueue task to Redis broker
+   │                         └── If Celery unavailable: run as FastAPI background task
+   │
+   ├── GET /status/{id} ──→  Reads job from Redis (progress: 0–100%)
+   │
+   ├── GET /download/{id} ─→ Returns .pptx file from disk
+   │
+   └── POST /preview/{id} ─→ Triggers LibreOffice conversion (background)
+
+Redis (Job Store)                    Celery Worker
+┌─────────────────────┐             ┌─────────────────────────┐
+│ narrato:job:{id}    │             │ generate_presentation   │
+│   status: queued    │◄────────────│   1. Update status      │
+│   progress: 0       │             │   2. Run full pipeline  │
+│   path: null        │             │   3. Update progress    │
+│   preview_urls: null│             │   4. Save .pptx path    │
+└─────────────────────┘             │   5. Set completed      │
+                                    └─────────────────────────┘
+```
+
+**Key design decisions:**
+- Jobs have a **24-hour TTL** in Redis
+- Celery tasks have a **120s soft timeout** and **180s hard timeout**
+- Tasks retry up to **2 times** with a 10-second delay
+- If Redis is unavailable, the system **gracefully degrades** to an in-memory job store
+- If Celery is unavailable, the system **falls back** to FastAPI background tasks
+
+### PPT Generation Flow
+
+The PPT generator (`ppt/generator.py`) takes the completed `PresentationState` and produces a `.pptx` file:
+
+1. **Theme selection** — picks from `modern`, `corporate`, or `minimal` theme configs
+2. **Slide rendering** — iterates over `structured_slides`, dispatches each to its type-specific renderer (14 layout types)
+3. **Speaker notes injection** — maps `speaker_notes` by `slide_id` and injects into each slide's notes page
+4. **Fallback rendering** — if any slide renderer fails, a generic fallback layout is used
+5. **File output** — saves to `{OUTPUT_DIR}/{uuid}.pptx` in 16:9 widescreen format
+
+All 14 slide layout types are supported:
+`title_slide`, `section_header`, `agenda_slide`, `problem_slide`, `stats_slide`, `feature_slide`, `comparison_slide`, `timeline_slide`, `example_slide`, `quote_slide`, `image_slide`, `conclusion_slide`, `cta_slide`, `thank_you_slide`
+
+### Preview System Flow
+
+The preview system converts completed `.pptx` files into slide thumbnail images:
+
+```
+POST /preview/{job_id}
+  → Validate job is completed and .pptx exists
+  → Background task starts:
+      1. LibreOffice headless converts .pptx → PDF
+      2. pdftoppm (poppler-utils) converts PDF → PNG images (150 DPI)
+      3. If pdftoppm unavailable, falls back to LibreOffice PNG conversion
+  → Preview images stored in outputs/previews/{job_id}/
+  → URLs saved to Redis job entry
+  → Frontend polls /status and receives preview_urls
+  → Images served via /previews/ static file mount
+```
+
+**System dependencies for previews:**
+- `libreoffice` (headless mode for PPTX → PDF conversion)
+- `poppler-utils` (provides `pdftoppm` for PDF → PNG conversion)
+
+---
+
+## 31. Setup (UV)
+
+### Prerequisites
+
+- **Python** ≥ 3.11
+- **Node.js** ≥ 18 (for frontend)
+- **Redis** server (for job store and Celery broker)
+- **LibreOffice** and **poppler-utils** (for slide preview generation)
+
+### Install uv (Python package manager)
+
+```bash
+# Install uv (recommended)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or via pip
+pip install uv
+```
+
+### Install system dependencies
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install redis-server libreoffice-impress poppler-utils
+
+# macOS
+brew install redis libreoffice poppler
+```
+
+### Install Python dependencies
+
+```bash
+# From the project root
+uv sync
+```
+
+This reads `pyproject.toml` and `uv.lock` to install all Python dependencies into a virtual environment.
+
+### Configure environment
+
+```bash
+# Copy the example env file
+cp .env.example .env
+
+# Edit .env and add your API keys:
+#   OPENAI_API_KEY=sk-your-key-here
+#   UNSPLASH_ACCESS_KEY=your-unsplash-key  (optional, for images)
+```
+
+### Run the backend (FastAPI)
+
+```bash
+cd backend
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The API will be available at `http://localhost:8000`. API docs at `http://localhost:8000/docs`.
+
+### Run the Celery worker
+
+```bash
+# In a separate terminal
+cd backend
+uv run celery -A worker.celery_app worker --loglevel=info
+```
+
+The worker connects to Redis and processes presentation generation jobs asynchronously.
+
+### Run the frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173`.
+
+### Start Redis
+
+```bash
+# Start Redis server
+redis-server
+
+# Or as a daemon
+redis-server --daemonize yes
+
+# Verify it's running
+redis-cli ping
+# → PONG
+```
+
+### Verify the system
+
+```bash
+# Check that all services are running
+curl http://localhost:8000/health
+# → {"status":"ok","version":"2.0.0","redis":"connected","celery":"connected"}
+```
+
+### Full startup sequence (all terminals)
+
+```bash
+# Terminal 1: Redis
+redis-server
+
+# Terminal 2: Celery worker
+cd backend && uv run celery -A worker.celery_app worker --loglevel=info
+
+# Terminal 3: FastAPI backend
+cd backend && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 4: Frontend
+cd frontend && npm install && npm run dev
+```
+
+Then open `http://localhost:5173` in your browser to use Narrato.
+
+---
