@@ -140,6 +140,14 @@ async def generate_preview(job_id: str, background_tasks: BackgroundTasks):
 
 def _generate_previews(job_id: str, pptx_path: str):
     """Run LibreOffice headless to convert PPTX → images."""
+    # Validate path is within output directory to prevent path traversal
+    real_pptx = os.path.realpath(pptx_path)
+    real_output = os.path.realpath(settings.output_dir)
+    if not real_pptx.startswith(real_output + os.sep):
+        logger.error("Refusing to process file outside output dir: %s", pptx_path)
+        update_job(job_id, preview_urls=[])
+        return
+
     preview_subdir = os.path.join(PREVIEW_DIR, job_id)
     os.makedirs(preview_subdir, exist_ok=True)
 
@@ -174,7 +182,9 @@ def _generate_previews(job_id: str, pptx_path: str):
                  os.path.join(preview_subdir, "slide")],
                 capture_output=True, text=True, timeout=60, check=True
             )
-        except (FileNotFoundError, subprocess.CalledProcessError):
+            logger.info("[preview] pdftoppm conversion succeeded for job %s", job_id)
+        except (FileNotFoundError, subprocess.CalledProcessError) as conv_err:
+            logger.warning("[preview] pdftoppm failed (%s), falling back to LibreOffice PNG for job %s", conv_err, job_id)
             # Fallback: try using LibreOffice to convert directly to PNG
             subprocess.run(
                 [

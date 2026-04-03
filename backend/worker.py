@@ -65,4 +65,5 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
     except Exception as exc:
         logger.exception("[celery] Job %s failed", job_id)
         set_job(job_id, status="failed", error=str(exc))
-        raise self.retry(exc=exc) if self.request.retries < self.max_retries else None
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc)
