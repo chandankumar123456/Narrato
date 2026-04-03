@@ -53,10 +53,13 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
     from services.job_store import set_job, update_job
 
     try:
-        update_job(job_id, status="processing", progress=10)
+        update_job(job_id, status="processing", progress=5)
+
+        def _progress(pct: int):
+            update_job(job_id, progress=pct)
 
         from orchestrator import run_pipeline
-        output_path = _run_async(run_pipeline(prompt, options))
+        output_path = _run_async(run_pipeline(prompt, options, progress_callback=_progress))
 
         set_job(job_id, status="completed", path=output_path, progress=100)
         logger.info("[celery] Job %s completed: %s", job_id, output_path)
