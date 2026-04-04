@@ -64,6 +64,8 @@ async def generate_multi_stage_content(
         slide_purpose = slide["purpose"]
 
         best_content: Optional[dict] = None
+        last_feedback: Optional[str] = None
+        last_output: Optional[dict] = None
 
         for attempt in range(1, MAX_ATTEMPTS + 1):
             # ── Phase 1: Content Generation ─────────────────────────
@@ -72,6 +74,8 @@ async def generate_multi_stage_content(
                 slide=slide,
                 slide_plan_summary=slide_plan_summary,
                 previous_contents=previous_contents,
+                previous_output=last_output,
+                previous_feedback=last_feedback,
             )
 
             # ── Phase 2: Self-Validation ────────────────────────────
@@ -87,6 +91,8 @@ async def generate_multi_stage_content(
                     slide["slide_id"], attempt, MAX_ATTEMPTS,
                     validation["reason"],
                 )
+                last_output = content
+                last_feedback = f"Validation failed: {validation['reason']}"
                 if attempt < MAX_ATTEMPTS:
                     continue
 
@@ -102,6 +108,8 @@ async def generate_multi_stage_content(
                     slide["slide_id"], attempt, MAX_ATTEMPTS,
                     critic["reason"],
                 )
+                last_output = content
+                last_feedback = f"Critic rejected: {critic['reason']}"
                 if attempt < MAX_ATTEMPTS:
                     continue
 
@@ -117,6 +125,8 @@ async def generate_multi_stage_content(
                     slide["slide_id"], attempt, MAX_ATTEMPTS,
                     intent_ok["reason"],
                 )
+                last_output = content
+                last_feedback = f"Intent violation: {intent_ok['reason']}"
                 if attempt < MAX_ATTEMPTS:
                     continue
 
@@ -156,8 +166,14 @@ async def _generate_slide_content(
     slide: dict,
     slide_plan_summary: str,
     previous_contents: list[dict],
+    previous_output: dict | None = None,
+    previous_feedback: str | None = None,
 ) -> dict:
-    """Generate mechanism-driven content for a single slide."""
+    """Generate mechanism-driven content for a single slide.
+
+    If previous_output and previous_feedback are provided (retry scenario),
+    they are included in the prompt so the LLM can improve upon the previous attempt.
+    """
     previous_summary = ""
     if previous_contents:
         previous_summary = json.dumps(
@@ -188,6 +204,19 @@ STRICT RULES:
 
 Return ONLY valid JSON. No markdown, no backticks, no preamble."""
 
+    # Build retry context if this is a retry attempt
+    retry_context = ""
+    if previous_output and previous_feedback:
+        retry_context = f"""
+
+PREVIOUS ATTEMPT (rejected — you MUST fix the issues below):
+{json.dumps(previous_output, indent=2)}
+
+FEEDBACK ON PREVIOUS ATTEMPT:
+{previous_feedback}
+
+Generate IMPROVED content that addresses ALL feedback. Do NOT repeat the same output."""
+
     user_prompt = f"""Topic: {state.topic}
 Presentation type: {state.presentation_type}
 Audience: {state.audience or "general"}
@@ -205,7 +234,7 @@ CURRENT SLIDE:
 
 PREVIOUS SLIDES CONTENT (DO NOT REPEAT):
 {previous_summary or "None yet — this is the first slide."}
-
+{retry_context}
 Generate content for the current slide following the JSON schema for type "{slide_type}".
 Each text field must be specific and mechanism-driven.
 For feature/problem/benefit slides, generate 3-4 bullet points where each bullet
