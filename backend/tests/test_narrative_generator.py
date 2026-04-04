@@ -13,9 +13,13 @@ from pipeline.narrative_generator import (
     BANNED_PHRASES,
     EXPECTED_SECTION_IDS,
     NARRATIVE_SECTIONS,
+    SECTION_ROLES,
+    _auto_fix_overlap,
     _build_slide_content,
+    _check_section_differentiation,
     _claim_fingerprint,
     _claims_overlap,
+    _deduplicate_concepts,
     _get_icon,
     _validate_sections,
     generate_narrative,
@@ -233,13 +237,15 @@ class TestValidationHelpers:
         with pytest.raises(ValueError, match="banned generic phrase.*layer"):
             _validate_sections(bad)
 
-    def test_validate_sections_rejects_overlap(self):
+    def test_validate_sections_tolerates_overlap(self):
+        """Overlap is detected and auto-fixed or tolerated — never raises."""
         bad = _mock_narrative_response()["sections"]
         repeated = "shared phrase about depot route pallet workflow unique overlap"
         bad[0]["key_points"][0] = repeated
         bad[1]["key_points"][1] = repeated
-        with pytest.raises(ValueError, match="overlap"):
-            _validate_sections(bad)
+        # Should NOT raise — overlap is soft-corrected or tolerated
+        sections = _validate_sections(bad)
+        assert len(sections) == 12
 
     def test_validate_sections_rejects_missing_markers(self):
         bad = _mock_narrative_response()["sections"]
@@ -275,6 +281,93 @@ class TestValidationHelpers:
         a = _claim_fingerprint({"content": "Actor: one\nAction: two\nData: three\nOutput: four", "key_points": [duplicated_claim, "x", "y"]})
         b = _claim_fingerprint({"content": "Actor: five\nAction: six\nData: seven\nOutput: eight", "key_points": [duplicated_claim, "m", "n"]})
         assert _claims_overlap(a, b)
+
+
+class TestAutoFixOverlap:
+    def test_removes_overlapping_words_from_key_points(self):
+        section = {
+            "id": "actor",
+            "title": "Actor",
+            "content": "Actor: one\nAction: two\nData: three\nOutput: four",
+            "key_points": ["shared phrase about depot route pallet", "unique point", "another unique"],
+        }
+        overlapping = {"shared phrase depot route pallet"}
+        fixed = _auto_fix_overlap(section, overlapping)
+        # Overlapping words should be removed from the first key_point
+        assert fixed["key_points"][0] != section["key_points"][0]
+        # Verify overlapping words are actually removed
+        for word in ("shared", "phrase", "depot", "route", "pallet"):
+            assert word not in fixed["key_points"][0].lower()
+        # Non-overlapping key_points should be unchanged
+        assert fixed["key_points"][1] == "unique point"
+        assert fixed["key_points"][2] == "another unique"
+
+    def test_preserves_key_points_when_no_overlap(self):
+        section = {
+            "id": "actor",
+            "title": "Actor",
+            "content": "Actor: one\nAction: two\nData: three\nOutput: four",
+            "key_points": ["unique alpha", "unique beta", "unique gamma"],
+        }
+        fixed = _auto_fix_overlap(section, set())
+        assert fixed["key_points"] == section["key_points"]
+
+
+class TestDeduplicateConcepts:
+    def test_removes_repeated_phrases_across_sections(self):
+        sections = _mock_narrative_response()["sections"]
+        repeated = "shared phrase about depot route pallet workflow unique overlap"
+        sections[0]["key_points"][0] = repeated
+        sections[1]["key_points"][1] = repeated
+        cleaned = _deduplicate_concepts(sections)
+        # After dedup, the repeated phrase in section[1] should be modified
+        assert cleaned[1]["key_points"][1] != repeated
+        # Verify the specific repeated words were removed
+        for word in ("shared", "phrase", "depot", "route", "pallet"):
+            assert word not in cleaned[1]["key_points"][1].lower()
+
+    def test_preserves_non_overlapping_sections(self):
+        sections = _mock_narrative_response()["sections"]
+        original_kps = [s["key_points"][:] for s in sections]
+        cleaned = _deduplicate_concepts(sections)
+        # All sections should still have 3 key_points each
+        for section in cleaned:
+            assert len(section["key_points"]) == 3
+
+    def test_returns_same_count(self):
+        sections = _mock_narrative_response()["sections"]
+        cleaned = _deduplicate_concepts(sections)
+        assert len(cleaned) == len(sections)
+
+
+class TestSectionDifferentiation:
+    def test_product_section_warns_on_process_terms(self):
+        warnings = _check_section_differentiation(
+            "product",
+            "Actor: user\nAction: uses pipeline routing\nData: logs\nOutput: plan",
+            ["The pipeline processes data", "Routing sequence stages", "Dashboard view"],
+        )
+        assert any("unexpected term" in w for w in warnings)
+
+    def test_mechanism_section_accepts_process_terms(self):
+        warnings = _check_section_differentiation(
+            "mechanism",
+            "Actor: coordinator\nInput: logs\nProcessing: routing rules compare\nOutput: dispatch",
+            ["Input feed combines data", "Processing step ranks loads", "Output issues plan"],
+        )
+        assert not any("unexpected term" in w for w in warnings)
+
+    def test_non_role_sections_return_no_warnings(self):
+        warnings = _check_section_differentiation(
+            "problem",
+            "Actor: buyer\nAction: missed slot\nData: edits\nOutput: spoilage",
+            ["Point one", "Point two", "Point three"],
+        )
+        assert warnings == []
+
+    def test_section_roles_defined(self):
+        assert "product" in SECTION_ROLES
+        assert "mechanism" in SECTION_ROLES
 
 
 class TestGenerateNarrative:
