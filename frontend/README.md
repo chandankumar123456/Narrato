@@ -381,7 +381,7 @@ State is passed via props from App → Pages → Components. The editor page man
 
 - Node.js ≥ 20
 - npm ≥ 9
-- Backend running on `http://localhost:8000`
+- Backend running on `http://localhost:8000` (see [backend README](../backend/README.md))
 
 ### Quick Start
 

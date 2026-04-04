@@ -188,7 +188,7 @@ Activated when the prompt contains structured schema (e.g., "5 examples of X wit
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
 | Frontend | React 19, React Router 7, Tailwind CSS 4, Vite 8 | SPA with SSE streaming |
-| Backend | FastAPI, Python 3.11+, Pydantic, Uvicorn | API + pipeline orchestration |
+| Backend | FastAPI, Python 3.11+, Pydantic, Uvicorn, uv | API + pipeline orchestration |
 | AI | OpenAI (GPT-4o-mini default), Anthropic Claude | Content generation + evaluation |
 | Rendering | Tailwind CDN, Playwright (optional) | HTML slides at 1920×1080, PNG/PDF |
 | Queue | Celery + Redis (optional) | Production async job processing |
@@ -231,7 +231,8 @@ Activated when the prompt contains structured schema (e.g., "5 examples of X wit
 ```
 narrato/
 ├── main.py                      # Entry point (starts uvicorn)
-├── pyproject.toml               # Python project metadata
+├── pyproject.toml               # Python project metadata + uv dependencies
+├── uv.lock                      # uv lockfile
 ├── .env.example                 # Environment variable template
 │
 ├── backend/
@@ -319,6 +320,7 @@ narrato/
 ### Prerequisites
 
 - Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
 - Node.js ≥ 20
 - Redis (optional — falls back to in-memory)
 
@@ -329,12 +331,14 @@ narrato/
 cp .env.example .env
 # Edit .env: set OPENAI_API_KEY (required)
 
-# 2. Backend
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --port 8000 --reload
+# 2. Install Python dependencies (from project root)
+uv sync
 
-# 3. Frontend (separate terminal)
+# 3. Start backend
+cd backend
+uv run uvicorn main:app --port 8000 --reload
+
+# 4. Frontend (separate terminal)
 cd frontend
 npm install
 npm run dev
@@ -348,10 +352,10 @@ npm run dev
 redis-server
 
 # Terminal 2: Celery worker
-cd backend && celery -A worker.celery_app worker --loglevel=info
+cd backend && uv run celery -A worker.celery_app worker --loglevel=info
 
 # Terminal 3: API server
-cd backend && uvicorn main:app --port 8000
+cd backend && uv run uvicorn main:app --port 8000
 
 # Terminal 4: Frontend
 cd frontend && npm run dev
@@ -374,7 +378,7 @@ See [backend/README.md](backend/README.md) for deep technical architecture. See 
 
 Run tests:
 ```bash
-cd backend && python -m pytest tests/ -v --ignore=tests/test_api.py
+cd backend && uv run python -m pytest tests/ -v --ignore=tests/test_api.py
 ```
 
 The pipeline is modular — each stage in `backend/pipeline/` is an independent function that takes and returns `PresentationState`. Add new stages by inserting them in `orchestrator.py`.

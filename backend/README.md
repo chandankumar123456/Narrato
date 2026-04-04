@@ -470,12 +470,10 @@ outputs/
 
 ```bash
 # 1. Prerequisites
-# Python 3.11+, pip/uv
+# Python 3.11+, uv (https://docs.astral.sh/uv/)
 
-# 2. Install dependencies
-cd backend
-pip install -r requirements.txt
-# or: uv sync (from project root)
+# 2. Install dependencies (from project root)
+uv sync
 
 # 3. Configure environment
 cp ../.env.example ../.env
@@ -486,11 +484,11 @@ cp ../.env.example ../.env
 #   REDIS_URL=redis://localhost:6379/0  (optional)
 
 # 4. Start the API server
-uvicorn main:app --port 8000 --reload
+uv run uvicorn main:app --port 8000 --reload
 # API docs: http://localhost:8000/docs
 
 # 5. Run tests
-python -m pytest tests/ -v --ignore=tests/test_api.py
+uv run python -m pytest tests/ -v --ignore=tests/test_api.py
 ```
 
 ### Redis (optional)
@@ -505,7 +503,7 @@ redis-server
 ### Celery (optional, for production-like async)
 
 ```bash
-celery -A worker.celery_app worker --loglevel=info
+uv run celery -A worker.celery_app worker --loglevel=info
 ```
 
 ---
