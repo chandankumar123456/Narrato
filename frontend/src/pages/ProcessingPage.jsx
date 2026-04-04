@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { pollStatus, requestPreview } from "../api/narrato";
 import ProgressPanel from "../components/ProgressPanel";
 import LivePreview from "../components/LivePreview";
 import ErrorBlock from "../components/ErrorBlock";

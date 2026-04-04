@@ -51,7 +51,7 @@ export default function useJob() {
           clearInterval(previewPollRef.current);
           previewPollRef.current = null;
         }
-      } catch (_) {
+      } catch {
         /* ignore */
       }
       if (attempts > 10) {
@@ -80,7 +80,7 @@ export default function useJob() {
             } else {
               try {
                 await requestPreview(id);
-              } catch (_) {
+              } catch {
                 /* optional */
               }
               pollForPreviews(id);
@@ -91,7 +91,7 @@ export default function useJob() {
             setStatus("error");
             setError(data.error || "Generation failed.");
           }
-        } catch (_) {
+        } catch {
           /* network hiccup, keep polling */
         }
       }, 2000);

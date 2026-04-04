@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -45,19 +46,6 @@
   --font-heading: "Manrope", sans-serif;
   --font-body: "Inter", sans-serif;
 }
-
-@layer base {
-  @font-face {
-    font-family: "Manrope";
-    font-style: normal;
-    font-weight: 100 900;
-    font-display: swap;
-    src: url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap");
-  }
-}
-
-/* Google Fonts import */
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap");
 
 * {
   box-sizing: border-box;
