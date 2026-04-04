@@ -21,7 +21,12 @@ from pipeline.narrative_generator import (
     _claims_overlap,
     _deduplicate_concepts,
     _get_icon,
+    _reject_generic_language,
+    _validate_required_markers,
+    _validate_section_specific_rules,
     _validate_sections,
+    auto_rewrite_invalid_sections,
+    soft_validation_failure,
     generate_narrative,
 )
 
@@ -195,27 +200,37 @@ class TestValidationHelpers:
         sections = _validate_sections(_mock_narrative_response()["sections"])
         assert len(sections) == 12
 
-    def test_validate_sections_rejects_wrong_schema(self):
+    def test_validate_sections_recovers_wrong_schema(self):
+        """Wrong schema is recovered with fallback — never raises."""
         bad = _mock_narrative_response()["sections"]
         bad[0] = {"id": "problem", "title": "Problem", "body": []}
-        with pytest.raises(ValueError, match="Section keys invalid"):
-            _validate_sections(bad)
+        # Should NOT raise — soft recovery fills in missing keys
+        sections = _validate_sections(bad)
+        assert len(sections) == 12
+        assert sections[0]["id"] == "problem"
 
-    def test_validate_sections_rejects_banned_phrase(self):
+    def test_reject_generic_language_raises_on_banned_phrase(self):
+        """The hard helper still raises for direct callers."""
+        with pytest.raises(ValueError, match="banned generic phrase"):
+            _reject_generic_language("problem", ["this AI platform handles everything"])
+
+    def test_validate_sections_soft_fixes_banned_phrase(self):
+        """_validate_sections strips banned phrases instead of raising."""
         bad = _mock_narrative_response()["sections"]
         bad[0]["content"] += "\nOutput: this AI platform handles everything"
-        with pytest.raises(ValueError, match="banned generic phrase"):
-            _validate_sections(bad)
+        # Should NOT raise — banned phrase is stripped
+        sections = _validate_sections(bad)
+        assert len(sections) == 12
+        assert "ai platform" not in sections[0]["content"].lower()
 
-    def test_system_in_title_allowed_but_banned_in_content(self):
+    def test_system_in_title_allowed_and_stripped_in_content(self):
         """'system' in predefined title 'System Gap' must not trigger the ban,
-        but 'system' appearing in content or key_points must."""
-        # Title containing "system" should be fine (the system_gap section uses it)
+        and 'system' appearing in content is stripped (not failed)."""
         good = _mock_narrative_response()["sections"]
         sections = _validate_sections(good)
         assert any(s["id"] == "system_gap" for s in sections)
 
-        # But "system" in content should be rejected
+        # "system" in content should be stripped by soft validation
         bad = _mock_narrative_response()["sections"]
         bad[0]["content"] = (
             "Actor: buyer at depot 1\n"
@@ -223,10 +238,13 @@ class TestValidationHelpers:
             "Data: stale order edits and sensor logs\n"
             "Output: spoilage rises because the system cannot react"
         )
-        with pytest.raises(ValueError, match="banned generic phrase.*system"):
-            _validate_sections(bad)
+        sections = _validate_sections(bad)
+        assert len(sections) == 12
+        # Verify "system" was removed from content
+        assert "system" not in sections[0]["content"].lower()
 
-    def test_layer_banned_in_content(self):
+    def test_layer_stripped_in_content(self):
+        """'layer' in content is stripped by soft validation."""
         bad = _mock_narrative_response()["sections"]
         bad[0]["content"] = (
             "Actor: buyer at depot 1\n"
@@ -234,8 +252,9 @@ class TestValidationHelpers:
             "Data: stale order edits\n"
             "Output: spoilage rises because the layer misses updates"
         )
-        with pytest.raises(ValueError, match="banned generic phrase.*layer"):
-            _validate_sections(bad)
+        sections = _validate_sections(bad)
+        assert len(sections) == 12
+        assert "layer" not in sections[0]["content"].lower()
 
     def test_validate_sections_tolerates_overlap(self):
         """Overlap is detected and auto-fixed or tolerated — never raises."""
@@ -247,34 +266,64 @@ class TestValidationHelpers:
         sections = _validate_sections(bad)
         assert len(sections) == 12
 
-    def test_validate_sections_rejects_missing_markers(self):
+    def test_validate_sections_soft_fixes_missing_markers(self):
+        """Missing markers are auto-injected — never raises."""
         bad = _mock_narrative_response()["sections"]
         bad[2]["content"] = "Actor: planner\nAction: checks exports\nData: stale files"
-        with pytest.raises(ValueError, match="missing required markers"):
-            _validate_sections(bad)
+        sections = _validate_sections(bad)
+        assert len(sections) == 12
+        # Marker should have been injected
+        assert "Output:" in sections[2]["content"]
 
-    def test_validate_sections_rejects_invalid_mechanism(self):
+    def test_validate_required_markers_raises_directly(self):
+        """Hard helper still raises when called directly."""
+        with pytest.raises(ValueError, match="missing required markers"):
+            _validate_required_markers("root_cause", "Actor: planner\nAction: checks\nData: stale")
+
+    def test_validate_sections_soft_fixes_invalid_mechanism(self):
+        """Invalid mechanism format is auto-fixed — never raises."""
         bad = _mock_narrative_response()["sections"]
         bad[5]["content"] = "Actor: coordinator\nAction: routes loads\nData: shelf-life\nOutput: dispatch plan"
-        with pytest.raises(ValueError, match="missing required markers"):
-            _validate_sections(bad)
+        sections = _validate_sections(bad)
+        assert len(sections) == 12
 
-    def test_validate_sections_rejects_traction_without_metrics(self):
+    def test_validate_sections_soft_fixes_traction_without_metrics(self):
+        """Traction without metrics is auto-fixed — never raises."""
         bad = _mock_narrative_response()["sections"]
         bad[9]["content"] = "Actor: ops lead\nAction: reviews adoption often\nData: weekly usage signals\nOutput: better performance"
         bad[9]["key_points"] = ["Usage is steady", "Teams log in often", "Results improved"]
-        with pytest.raises(ValueError, match="numbers"):
-            _validate_sections(bad)
+        sections = _validate_sections(bad)
+        assert len(sections) == 12
+        # Verify metrics were injected
+        blob = "\n".join([sections[9]["content"], *sections[9]["key_points"]])
+        from pipeline.narrative_generator import NUMBER_RE, FREQUENCY_RE
+        assert NUMBER_RE.search(blob) or FREQUENCY_RE.search(blob)
 
-    def test_validate_sections_rejects_business_model_without_trigger(self):
+    def test_validate_sections_soft_fixes_business_model_without_trigger(self):
+        """Business model without trigger is auto-fixed — never raises."""
         bad = _mock_narrative_response()["sections"]
         bad[7]["content"] = (
             "Payer: distributors\nPricing: $120 per site per month\n"
             "Trigger: active contract\nOutput: invoices go out"
         )
         bad[7]["key_points"] = ["Monthly subscription", "Distributor pays", "Invoices exist"]
-        with pytest.raises(ValueError, match="revenue trigger"):
-            _validate_sections(bad)
+        sections = _validate_sections(bad)
+        assert len(sections) == 12
+
+    def test_validate_section_specific_rules_raises_directly(self):
+        """Hard helper still raises when called directly."""
+        with pytest.raises(ValueError, match="numbers"):
+            _validate_section_specific_rules(
+                "traction",
+                "Actor: lead\nAction: reviews\nData: signals\nOutput: better",
+                ["Usage is steady", "Teams log in", "Results ok"],
+            )
+
+    def test_validate_sections_handles_fewer_than_12(self):
+        """Fewer than 12 sections are padded with fallbacks — never raises."""
+        payload = _mock_narrative_response()["sections"][:10]
+        sections = _validate_sections(payload)
+        assert len(sections) == 12
 
     def test_claim_overlap_helper(self):
         duplicated_claim = "alpha beta gamma delta epsilon"
@@ -398,13 +447,15 @@ class TestGenerateNarrative:
         assert result.metadata["narrative_generation"]["schema"] == "id_title_content_key_points"
 
     @pytest.mark.asyncio
-    async def test_invalid_sections_raise(self, state):
+    async def test_fewer_sections_recovered(self, state):
+        """Fewer than 12 sections are padded — pipeline never fails."""
         with patch("pipeline.narrative_generator.call_llm_json", new_callable=AsyncMock) as mock_llm:
             payload = _mock_narrative_response()
             payload["sections"] = payload["sections"][:11]
             mock_llm.return_value = payload
-            with pytest.raises(ValueError, match="expected exactly 12"):
-                await generate_narrative(state)
+            result = await generate_narrative(state)
+        # Should produce slides (padded to 12 sections + title + CTA)
+        assert len(result.structured_slides) == 14
 
     @pytest.mark.asyncio
     async def test_all_slides_have_content(self, state):
@@ -439,3 +490,85 @@ class TestStreamTermination:
         from services.event_system import EventType
         assert hasattr(EventType, "JOB_FAILED")
         assert hasattr(EventType, "JOB_COMPLETED")
+
+
+class TestSoftValidationEngine:
+    """Tests for the soft validation engine that corrects instead of failing."""
+
+    def test_soft_validation_failure_returns_string(self):
+        result = soft_validation_failure("traction", "must include usage frequency", "Actor: lead\nAction: reviews\nData: signals\nOutput: ok")
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_soft_validation_injects_frequency_for_traction(self):
+        from pipeline.narrative_generator import FREQUENCY_RE
+        content = "Actor: ops\nAction: reviews adoption\nData: signals\nOutput: better"
+        result = soft_validation_failure("traction", "must include usage frequency", content)
+        assert FREQUENCY_RE.search(result)
+
+    def test_soft_validation_injects_numbers_for_traction(self):
+        from pipeline.narrative_generator import NUMBER_RE
+        content = "Actor: ops\nAction: reviews adoption\nData: signals\nOutput: better"
+        result = soft_validation_failure("traction", "must include numbers", content)
+        assert NUMBER_RE.search(result)
+
+    def test_soft_validation_injects_improvement_for_traction(self):
+        from pipeline.narrative_generator import IMPROVEMENT_RE
+        content = "Actor: ops\nAction: reviews adoption\nData: signals\nOutput: better"
+        result = soft_validation_failure("traction", "must include measurable improvement", content)
+        assert IMPROVEMENT_RE.search(result)
+
+    def test_soft_validation_never_raises(self):
+        """soft_validation_failure must NEVER raise an exception."""
+        try:
+            soft_validation_failure("unknown", "unknown rule", "")
+            soft_validation_failure("traction", "must include usage frequency", "")
+            soft_validation_failure("mechanism", "must follow Input -> Processing -> Output", "")
+            soft_validation_failure("business_model", "must include pricing logic", "")
+        except Exception:
+            pytest.fail("soft_validation_failure raised an exception")
+
+
+class TestAutoRewriteInvalidSections:
+    """Tests for the auto_rewrite_invalid_sections post-validation pass."""
+
+    def test_traction_gets_metrics_injected(self):
+        from pipeline.narrative_generator import NUMBER_RE, FREQUENCY_RE
+        sections = _mock_narrative_response()["sections"]
+        # Strip metrics from traction section
+        sections[9]["content"] = "Actor: ops\nAction: reviews\nData: signals\nOutput: better"
+        sections[9]["key_points"] = ["Usage is steady", "Teams log in", "Results ok"]
+        rewritten = auto_rewrite_invalid_sections(sections)
+        blob = "\n".join([rewritten[9]["content"], *rewritten[9]["key_points"]])
+        # At least frequency or number should be present after rewrite
+        assert NUMBER_RE.search(blob) or FREQUENCY_RE.search(blob)
+
+    def test_preserves_valid_sections(self):
+        sections = _mock_narrative_response()["sections"]
+        rewritten = auto_rewrite_invalid_sections(sections)
+        # Valid sections should remain unchanged
+        for i, (orig, rw) in enumerate(zip(sections, rewritten)):
+            assert orig["id"] == rw["id"]
+
+    def test_returns_same_count(self):
+        sections = _mock_narrative_response()["sections"]
+        rewritten = auto_rewrite_invalid_sections(sections)
+        assert len(rewritten) == len(sections)
+
+
+class TestPipelineNeverFailsAtNarrative:
+    """Ensure the orchestrator never raises PipelineFailure at narrative stage."""
+
+    def test_orchestrator_has_fallback_injection(self):
+        """The orchestrator must define _inject_fallback_slides."""
+        from orchestrator import _inject_fallback_slides
+        assert callable(_inject_fallback_slides)
+
+    def test_fallback_slides_are_non_empty(self):
+        from orchestrator import _inject_fallback_slides
+        state = _make_state()
+        result = _inject_fallback_slides(state)
+        assert result.structured_slides is not None
+        assert len(result.structured_slides) > 0
+        assert result.slide_plan is not None
+        assert len(result.slide_plan) > 0

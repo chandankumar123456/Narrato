@@ -177,10 +177,11 @@ async def run_pipeline(prompt: str, options: dict = {},
         try:
             state = await generate_narrative(state)
         except Exception as exc:
-            logger.warning("[pipeline] narrative_generation failed: %s — pipeline will continue", exc)
-            # Only fail if no slides were generated at all (true LLM failure)
+            logger.warning("[pipeline] narrative_generation failed: %s — pipeline will continue with fallback", exc)
+            # Never fail the pipeline at narrative stage — use fallback slides
             if not state.structured_slides:
-                _fail("narrative_generation", str(exc))
+                logger.warning("[pipeline] No slides generated — injecting minimal fallback")
+                state = _inject_fallback_slides(state)
 
         total_slides = len(state.structured_slides or [])
         total_steps = GLOBAL_STEPS + (total_slides * per_slide_steps)
@@ -319,6 +320,45 @@ def _resolve_output_dir() -> str:
     visual_dir = os.path.join(base, "visual")
     os.makedirs(visual_dir, exist_ok=True)
     return visual_dir
+
+
+def _inject_fallback_slides(state) -> object:
+    """Inject minimal fallback slides so the pipeline always produces output."""
+    fallback_slides = [
+        {
+            "slide_id": 1,
+            "type": "title_slide",
+            "content": {
+                "title": state.topic,
+                "subtitle": "Presentation generated with fallback content.",
+                "presenter": "",
+            },
+        },
+        {
+            "slide_id": 2,
+            "type": "feature_slide",
+            "content": {
+                "title": "Overview",
+                "features": [
+                    {"icon": "🔹", "label": "Topic", "description": state.topic},
+                    {"icon": "🔸", "label": "Type", "description": state.presentation_type or "general"},
+                    {"icon": "⚡", "label": "Audience", "description": state.audience or "general"},
+                ],
+                "summary": "This presentation was generated with fallback content due to a generation issue.",
+            },
+        },
+    ]
+    fallback_plan = [
+        {"slide_id": 1, "section": "intro", "purpose": "Title slide", "type": "title_slide"},
+        {"slide_id": 2, "section": "overview", "purpose": "Overview", "type": "feature_slide"},
+    ]
+    logger.warning("[pipeline] Using %d fallback slides", len(fallback_slides))
+    return state.model_copy(
+        update={
+            "slide_plan": fallback_plan,
+            "structured_slides": fallback_slides,
+        }
+    )
 
 
 def _write_intelligence_report(state) -> None:
