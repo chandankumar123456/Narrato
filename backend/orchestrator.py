@@ -7,6 +7,7 @@ from pipeline.slide_planner import plan_slides
 from pipeline.slide_type_assigner import assign_slide_types
 from pipeline.content_structurer import generate_structured_content
 from pipeline.multi_stage_content import generate_multi_stage_content
+from pipeline.slide_evaluator import evaluate_and_improve_slides
 from pipeline.intelligence_report import generate_intelligence_report
 from pipeline.strict_slide_planner import plan_slides_strict
 from pipeline.strict_content_structurer import generate_strict_content
@@ -87,6 +88,20 @@ async def run_pipeline(prompt: str, options: dict = {},
         # critic loop, and intent enforcement
         state = await generate_multi_stage_content(state)
         logger.info("[pipeline] Multi-stage content generation complete")
+        _report(55)
+
+        # Phase 1-6 Evaluator: Hard validation, scoring, strict critic,
+        # targeted regeneration, and intent enforcement on generated slides
+        state = await evaluate_and_improve_slides(state)
+        evals = (state.metadata or {}).get("slide_evaluations", [])
+        avg_score = (
+            round(sum(e.get("overall_score", 0) for e in evals) / len(evals), 1)
+            if evals else 0
+        )
+        logger.info(
+            "[pipeline] Slide evaluation complete: %d slides, avg score %.1f/5",
+            len(evals), avg_score,
+        )
         _report(60)
 
     # ── Shared tail (both paths) ──────────────────────────────────
