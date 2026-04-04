@@ -126,6 +126,8 @@ BANNED_PHRASES = [
     "solution",
     "engine",
     "platform",
+    "system",
+    "layer",
 ]
 
 STOPWORDS = {
@@ -174,7 +176,7 @@ HARD RULES:
 1. Output EXACTLY 12 sections in this exact order: {expected_ids_json}
 2. Each section may talk ONLY about its assigned dimension and nothing else.
 3. Before writing each section, check all previous sections and SHIFT dimension if any explanation, mechanism, benefit, or phrasing overlaps.
-4. NO generic language. BANNED terms and phrases: {banned_json}
+4. NO generic language. NEVER use vague product terms. BANNED: {banned_json}
 5. Each section must be concrete and directly usable in slides.
 6. Every section must include actor, action, data, and output fields in content.
 7. Section "mechanism" must use Input -> Processing -> Output explicitly.
@@ -203,7 +205,7 @@ Presentation type: {state.presentation_type}
 Audience: {state.audience or 'general'}
 Tone: {state.tone}
 
-Generate a strict narrative progression where each section answers "why next?" without repeating prior sections.
+Generate a strict narrative progression. Each section MUST answer "why next?" — the reader should feel a logical pull from one section to the next. NEVER repeat prior sections.
 
 Required JSON format:
 {{
@@ -363,7 +365,9 @@ def _validate_single_section(section: dict, expected: dict) -> dict:
     if len({_normalize_text(point) for point in clean_points}) != len(clean_points):
         raise ValueError(f"Section '{section_id}' contains duplicate key_points")
 
-    _reject_generic_language(section_id, [title, content, *clean_points])
+    # Check content and key_points for banned phrases (titles are predefined
+    # by NARRATIVE_SECTIONS and may legitimately contain words like "system").
+    _reject_generic_language(section_id, [content, *clean_points])
     _validate_required_markers(section_id, content)
     _validate_actor_action_data_output(section_id, content)
     _validate_section_specific_rules(section_id, content, clean_points)

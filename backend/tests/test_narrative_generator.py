@@ -138,7 +138,7 @@ class TestBannedPhrases:
         assert len(BANNED_PHRASES) > 0
 
     def test_contains_new_generic_terms(self):
-        for phrase in ["solution", "engine", "platform", "ai platform"]:
+        for phrase in ["solution", "engine", "platform", "ai platform", "system", "layer"]:
             assert phrase in BANNED_PHRASES
 
 
@@ -201,6 +201,36 @@ class TestValidationHelpers:
         bad = _mock_narrative_response()["sections"]
         bad[0]["content"] += "\nOutput: this AI platform handles everything"
         with pytest.raises(ValueError, match="banned generic phrase"):
+            _validate_sections(bad)
+
+    def test_system_in_title_allowed_but_banned_in_content(self):
+        """'system' in predefined title 'System Gap' must not trigger the ban,
+        but 'system' appearing in content or key_points must."""
+        # Title containing "system" should be fine (the system_gap section uses it)
+        good = _mock_narrative_response()["sections"]
+        sections = _validate_sections(good)
+        assert any(s["id"] == "system_gap" for s in sections)
+
+        # But "system" in content should be rejected
+        bad = _mock_narrative_response()["sections"]
+        bad[0]["content"] = (
+            "Actor: buyer at depot 1\n"
+            "Action: the system fails to route pallets\n"
+            "Data: stale order edits and sensor logs\n"
+            "Output: spoilage rises because the system cannot react"
+        )
+        with pytest.raises(ValueError, match="banned generic phrase.*system"):
+            _validate_sections(bad)
+
+    def test_layer_banned_in_content(self):
+        bad = _mock_narrative_response()["sections"]
+        bad[0]["content"] = (
+            "Actor: buyer at depot 1\n"
+            "Action: dispatches through a data layer\n"
+            "Data: stale order edits\n"
+            "Output: spoilage rises because the layer misses updates"
+        )
+        with pytest.raises(ValueError, match="banned generic phrase.*layer"):
             _validate_sections(bad)
 
     def test_validate_sections_rejects_overlap(self):
