@@ -12,9 +12,11 @@ export default function ResultPage({
   const { job_id } = useParams();
   const navigate = useNavigate();
 
-  // If landing directly on result page, try to resume to check status
+  // Resume polling if user lands directly on /job/:id/result (e.g. browser refresh)
+  // This triggers when we have a URL param but no hook state yet (idle + no hookJobId)
   useEffect(() => {
-    if (job_id && !hookJobId && status === "idle") {
+    const shouldResumeJob = job_id && !hookJobId && status === "idle";
+    if (shouldResumeJob) {
       resumeJob(job_id);
     }
   }, [job_id, hookJobId, status, resumeJob]);
