@@ -2,18 +2,6 @@ import { downloadUrl } from "../../api/narrato";
 
 const FORMATS = [
   {
-    id: "pptx",
-    label: "PowerPoint",
-    desc: "Download as .pptx file",
-    icon: (
-      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M6 2a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6H6zm7 1.5L18.5 9H13V3.5zM8 13h2.5a2.5 2.5 0 010 5H9v2H8v-7zm1 4h1.5a1.5 1.5 0 000-3H9v3z"/>
-      </svg>
-    ),
-    color: "from-orange-500/20 to-red-500/20",
-    border: "border-orange-500/20",
-  },
-  {
     id: "pdf",
     label: "PDF",
     desc: "Export as PDF document",
@@ -40,17 +28,16 @@ const FORMATS = [
 ];
 
 /**
- * Export modal — format selection with preview.
+ * Export modal — format selection with download.
  */
 export default function ExportModal({ isOpen, onClose, jobId, slideCount }) {
   if (!isOpen) return null;
 
   function handleDownload(format) {
-    if (format === "pptx") {
+    if (format === "pdf") {
       window.open(downloadUrl(jobId), "_blank");
     } else {
-      // For PDF and images, use same download URL since they're generated
-      // from the same pipeline. In production these would be separate endpoints.
+      // Images — same download endpoint (rendering engine produces both)
       window.open(downloadUrl(jobId), "_blank");
     }
   }

@@ -1,4 +1,4 @@
-import uuid, asyncio, os, logging, glob, subprocess, traceback, json, copy, shutil
+import uuid, asyncio, os, logging, glob, json, copy, shutil
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -117,15 +117,17 @@ async def _run_job(job_id: str, prompt: str, options: dict):
         result = await run_pipeline(prompt, run_options,
                                     progress_callback=_progress,
                                     event_callback=_event)
-        # Support both old (str) and new (dict) return formats
+        # Extract results
         if isinstance(result, dict):
-            path = result["pptx_path"]
             html_slides = result.get("html_slides", [])
             structured_slides = result.get("structured_slides", [])
+            pdf_path = result.get("pdf_path")
+            image_paths = result.get("image_paths", [])
         else:
-            path = result
             html_slides = []
             structured_slides = []
+            pdf_path = None
+            image_paths = []
 
         # Save HTML slides to job-specific directory
         safe_id = os.path.basename(job_id)
@@ -138,8 +140,9 @@ async def _run_job(job_id: str, prompt: str, options: dict):
                 f.write(html)
             html_slide_paths.append(f"/outputs/{safe_id}/slide_{idx + 1}.html")
 
-        set_job(job_id, status="completed", path=path, progress=100,
-                html_slides=html_slide_paths, structured_slides=structured_slides)
+        set_job(job_id, status="completed", progress=100,
+                html_slides=html_slide_paths, structured_slides=structured_slides,
+                pdf_path=pdf_path, image_paths=image_paths)
     except Exception as e:
         logger.exception("[api] Job %s failed", job_id)
         # Emit failure event
@@ -177,113 +180,46 @@ async def status(job_id: str):
 
 @app.get("/download/{job_id}")
 async def download(job_id: str):
+    """Download the generated PDF for a completed job."""
     job = get_job(job_id)
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="File not ready")
-    path = job.get("path")
-    if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="File not found on disk")
-    return FileResponse(
-        path,
-        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        filename="narrato.pptx"
-    )
+
+    pdf_path = job.get("pdf_path")
+    if pdf_path and os.path.isfile(pdf_path):
+        return FileResponse(
+            pdf_path,
+            media_type="application/pdf",
+            filename="narrato.pdf"
+        )
+
+    # Fallback: try to find a PDF in the visual output directory
+    visual_pdf = os.path.join(VISUAL_DIR, "presentation.pdf")
+    if os.path.isfile(visual_pdf):
+        return FileResponse(
+            visual_pdf,
+            media_type="application/pdf",
+            filename="narrato.pdf"
+        )
+
+    raise HTTPException(status_code=404, detail="PDF not found — rendering engine may not be available")
 
 
 @app.post("/preview/{job_id}")
-async def generate_preview(job_id: str, background_tasks: BackgroundTasks):
-    """Convert a completed .pptx to slide thumbnail images using LibreOffice."""
+async def generate_preview(job_id: str):
+    """Return HTML slide URLs as previews for a completed job.
+
+    No external tools needed — slides are already HTML files.
+    """
     job = get_job(job_id)
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="Job not completed")
 
-    pptx_path = job.get("path")
-    if not pptx_path or not os.path.isfile(pptx_path):
-        raise HTTPException(status_code=404, detail="PPTX file not found")
+    html_slides = job.get("html_slides", [])
+    if html_slides:
+        return {"preview_urls": html_slides}
 
-    # Check if previews already exist
-    existing = job.get("preview_urls")
-    if existing:
-        return {"preview_urls": existing}
-
-    background_tasks.add_task(_generate_previews, job_id, pptx_path)
-    return {"status": "generating", "message": "Preview generation started. Poll /status for results."}
-
-
-def _generate_previews(job_id: str, pptx_path: str):
-    """Run LibreOffice headless to convert PPTX → images."""
-    # Validate path is within output directory to prevent path traversal
-    real_pptx = os.path.realpath(pptx_path)
-    real_output = os.path.realpath(settings.output_dir)
-    if not real_pptx.startswith(real_output + os.sep):
-        logger.error("Refusing to process file outside output dir: %s", pptx_path)
-        update_job(job_id, preview_urls=[])
-        return
-
-    preview_subdir = os.path.join(PREVIEW_DIR, job_id)
-    os.makedirs(preview_subdir, exist_ok=True)
-
-    try:
-        # Convert PPTX to PDF first
-        result = subprocess.run(
-            [
-                "libreoffice", "--headless", "--convert-to", "pdf",
-                "--outdir", preview_subdir, pptx_path
-            ],
-            capture_output=True, text=True, timeout=60
-        )
-
-        if result.returncode != 0:
-            logger.error("LibreOffice PDF conversion failed: %s", result.stderr)
-            update_job(job_id, preview_urls=[])
-            return
-
-        # Find the PDF
-        pdf_files = glob.glob(os.path.join(preview_subdir, "*.pdf"))
-        if not pdf_files:
-            logger.error("No PDF output found after LibreOffice conversion")
-            update_job(job_id, preview_urls=[])
-            return
-
-        pdf_path = pdf_files[0]
-
-        # Try converting PDF pages to images using pdftoppm (poppler-utils)
-        try:
-            subprocess.run(
-                ["pdftoppm", "-png", "-r", "150", pdf_path,
-                 os.path.join(preview_subdir, "slide")],
-                capture_output=True, text=True, timeout=60, check=True
-            )
-            logger.info("[preview] pdftoppm conversion succeeded for job %s", job_id)
-        except (FileNotFoundError, subprocess.CalledProcessError) as conv_err:
-            logger.warning("[preview] pdftoppm failed (%s), falling back to LibreOffice PNG for job %s", conv_err, job_id)
-            # Fallback: try using LibreOffice to convert directly to PNG
-            subprocess.run(
-                [
-                    "libreoffice", "--headless", "--convert-to", "png",
-                    "--outdir", preview_subdir, pptx_path
-                ],
-                capture_output=True, text=True, timeout=60
-            )
-
-        # Collect generated image URLs
-        image_files = sorted(
-            glob.glob(os.path.join(preview_subdir, "*.png")) +
-            glob.glob(os.path.join(preview_subdir, "*.jpg"))
-        )
-        preview_urls = [
-            f"/previews/{job_id}/{os.path.basename(f)}" for f in image_files
-        ]
-
-        update_job(job_id, preview_urls=preview_urls)
-        logger.info("[preview] Generated %d preview images for job %s", len(preview_urls), job_id)
-
-    except subprocess.TimeoutExpired:
-        logger.error("Preview generation timed out for job %s", job_id)
-        update_job(job_id, preview_urls=[])
-    except Exception:
-        logger.exception("Preview generation failed for job %s", job_id)
-        update_job(job_id, preview_urls=[])
+    return {"preview_urls": [], "message": "No slides available for preview"}
 
 
 @app.get("/health")

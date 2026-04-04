@@ -332,9 +332,12 @@ class TestPipelineFailure:
 
 
 class TestVisualPipelinePlaywrightSkip:
-    def test_check_playwright_returns_bool(self):
-        from pipeline.visual_rendering_pipeline import _check_playwright
-        assert isinstance(_check_playwright(), bool)
+    def test_rendering_engine_graceful_without_playwright(self):
+        """Rendering engine returns empty lists when Playwright is not installed."""
+        from pipeline.visual_rendering_engine import render_slides_to_images
+        # This should return empty list gracefully (Playwright not installed in test env)
+        result = render_slides_to_images(["<html></html>"], "/tmp/test_render")
+        assert isinstance(result, list)
 
 
 class TestStreamTermination:

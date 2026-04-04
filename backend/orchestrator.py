@@ -6,7 +6,7 @@ Architecture:
   3. Generate FULL narrative in ONE LLM call → split into slides
   4. Visual pipeline (design + template, deterministic, no LLM)
   5. Speaker notes (1 LLM call)
-  6. PPT generation (deterministic)
+  6. Visual export (HTML + rendering engine for images/PDF)
 
 Total LLM calls: ~4 (down from dozens in the old per-slide approach).
 Pipeline stops immediately on failure after max retries.
@@ -22,10 +22,9 @@ from pipeline.strict_content_structurer import generate_strict_content
 from pipeline.content_validator import validate_content
 from pipeline.visual_mapper import generate_visual_queries
 from pipeline.speaker_notes_generator import generate_speaker_notes
-from ppt.generator import generate_ppt
 from pipeline.visual_design_engine import run_design_engine
 from pipeline.visual_template_engine import run_template_engine
-from pipeline.visual_rendering_engine import run_rendering_engine, build_render_instructions
+from pipeline.visual_rendering_engine import render_slides_to_images, render_slides_to_pdf, build_render_instructions
 from pipeline.visual_export_engine import run_export_engine
 from services.event_system import PipelineEvent, EventType
 import logging
@@ -246,22 +245,15 @@ async def run_pipeline(prompt: str, options: dict = {},
               slide_id=slide_num, total_slides=total_slides,
               data={"html": html_content})
 
-    # ── Visual export (PNG/PDF) — skip Playwright if missing ──────
+    # ── Visual export (PNG/PDF) — skip rendering if engine unavailable ──
     logger.info("[pipeline] Running visual export pipeline")
     output_dir = _resolve_output_dir()
     visual_output = await _run_visual_export_safe(all_html_slides, output_dir)
     state = state.model_copy(update={"visual_render_output": visual_output})
 
-    # PPT generation
-    try:
-        output_path = generate_ppt(state)
-    except Exception as exc:
-        _fail("ppt_generation", str(exc))
-
-    state = state.model_copy(update={"output_path": output_path})
     completed_steps += 1
-    logger.info("[pipeline] PPT generated: %s", output_path)
-    _emit(EventType.STAGE_UPDATE, "ppt", "PowerPoint generated…",
+    logger.info("[pipeline] Visual export complete")
+    _emit(EventType.STAGE_UPDATE, "export", "Export artifacts generated…",
           _compute_progress(completed_steps, total_steps),
           total_slides=total_slides)
 
@@ -270,61 +262,51 @@ async def run_pipeline(prompt: str, options: dict = {},
           100, total_slides=total_slides)
 
     return {
-        "pptx_path": output_path,
         "html_slides": all_html_slides if all_html_slides else visual_output.get("html_slides", []),
         "structured_slides": [s for s in (state.structured_slides or [])],
+        "image_paths": visual_output.get("image_paths", []),
+        "pdf_path": visual_output.get("pdf_path"),
     }
 
 
 async def _run_visual_export_safe(html_slides: list[str], output_dir: str) -> dict:
-    """Run visual export with safe Playwright handling.
+    """Run visual export with safe rendering engine handling.
 
-    If Playwright is NOT installed:
-      - SKIP rendering completely
-      - Do NOT call subprocess
-      - Do NOT attempt rendering
-      - Return HTML-only output
+    Attempts browser-based rendering for images/PDF.  Falls back to
+    HTML-only export when the rendering engine is unavailable.
     """
-    try:
-        from playwright.async_api import async_playwright  # noqa: F401
-        has_playwright = True
-    except ImportError:
-        has_playwright = False
-        logger.info("[pipeline] Playwright not installed — skipping browser rendering")
-
     render_instructions = build_render_instructions(len(html_slides))
+    image_paths: list[str] = []
+    pdf_path = None
 
-    if has_playwright:
-        try:
-            render_result = await run_rendering_engine(html_slides, output_dir)
-        except Exception as exc:
-            logger.warning("[pipeline] Rendering engine failed: %s — continuing without images", exc)
-            render_result = {"render_instructions": render_instructions, "image_paths": [], "pdf_path": None}
-    else:
-        # No Playwright: skip ALL rendering, no subprocess calls
-        render_result = {"render_instructions": render_instructions, "image_paths": [], "pdf_path": None}
+    try:
+        image_paths = render_slides_to_images(html_slides, output_dir)
+    except Exception as exc:
+        logger.warning("[pipeline] Image rendering failed: %s — continuing without images", exc)
+
+    try:
+        pdf_path = render_slides_to_pdf(html_slides, output_dir)
+    except Exception as exc:
+        logger.warning("[pipeline] PDF rendering failed: %s — continuing without PDF", exc)
 
     try:
         export_result = run_export_engine(
             html_slides=html_slides,
-            image_paths=render_result.get("image_paths", []),
-            pdf_path=render_result.get("pdf_path"),
+            image_paths=image_paths,
+            pdf_path=pdf_path,
             output_dir=output_dir,
         )
     except Exception as exc:
         logger.warning("[pipeline] Export engine failed: %s", exc)
-        export_result = {"html_paths": [], "image_paths": [], "pdf_path": None,
-                         "ppt_path": None, "ppt_structure": {"slides": []}}
+        export_result = {"html_paths": [], "image_paths": [], "pdf_path": None}
 
     return {
         "designs": [],
         "html_slides": html_slides,
         "render_instructions": render_instructions,
         "html_paths": export_result.get("html_paths", []),
-        "image_paths": export_result.get("image_paths", []),
-        "pdf_path": export_result.get("pdf_path"),
-        "ppt_path": export_result.get("ppt_path"),
-        "ppt_structure": export_result.get("ppt_structure", {"slides": []}),
+        "image_paths": export_result.get("image_paths", image_paths),
+        "pdf_path": export_result.get("pdf_path", pdf_path),
     }
 
 
