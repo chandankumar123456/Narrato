@@ -287,14 +287,14 @@ async def health():
 # ── Interactive Product Layer endpoints ────────────────────────────────
 
 
-def _safe_job_dir(job_id: str) -> str:
-    """Return a validated job output directory, preventing path traversal."""
+def _safe_job_dir(job_id: str) -> tuple[str, str]:
+    """Return a validated (job_output_dir, safe_id) tuple, preventing path traversal."""
     safe_id = os.path.basename(job_id)
     job_dir = os.path.realpath(os.path.join(settings.output_dir, safe_id))
     real_output = os.path.realpath(settings.output_dir)
     if not job_dir.startswith(real_output + os.sep):
         raise HTTPException(status_code=400, detail="Invalid job_id")
-    return job_dir
+    return job_dir, safe_id
 
 
 class RegenerateSlideRequest(BaseModel):
@@ -397,7 +397,7 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
             new_html = new_html_list[0]
 
             # Save the new HTML
-            job_output_dir = _safe_job_dir(job_id)
+            job_output_dir, safe_id = _safe_job_dir(job_id)
             os.makedirs(job_output_dir, exist_ok=True)
             slide_path = os.path.join(job_output_dir, f"slide_{req.slide_id}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
@@ -408,7 +408,7 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
 
             return {
                 "slide_id": req.slide_id,
-                "html_url": f"/outputs/{job_id}/slide_{req.slide_id}.html",
+                "html_url": f"/outputs/{safe_id}/slide_{req.slide_id}.html",
                 "html": new_html,
                 "content": new_content,
                 "status": "regenerated",
@@ -439,14 +439,14 @@ async def restyle_slides(job_id: str, req: RestyleRequest):
         html_slides = run_template_engine(designs)
 
         # Save restyled HTML slides
-        job_output_dir = _safe_job_dir(job_id)
+        job_output_dir, safe_id = _safe_job_dir(job_id)
         os.makedirs(job_output_dir, exist_ok=True)
         html_slide_paths = []
         for idx, html in enumerate(html_slides):
             slide_path = os.path.join(job_output_dir, f"slide_{idx + 1}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
                 f.write(html)
-            html_slide_paths.append(f"/outputs/{job_id}/slide_{idx + 1}.html")
+            html_slide_paths.append(f"/outputs/{safe_id}/slide_{idx + 1}.html")
 
         update_job(job_id, html_slides=html_slide_paths)
 
@@ -491,7 +491,7 @@ async def update_slide(job_id: str, req: UpdateSlideRequest):
 
         if new_html_list:
             new_html = new_html_list[0]
-            job_output_dir = _safe_job_dir(job_id)
+            job_output_dir, safe_id = _safe_job_dir(job_id)
             os.makedirs(job_output_dir, exist_ok=True)
             slide_path = os.path.join(job_output_dir, f"slide_{req.slide_id}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
@@ -501,7 +501,7 @@ async def update_slide(job_id: str, req: UpdateSlideRequest):
 
             return {
                 "slide_id": req.slide_id,
-                "html_url": f"/outputs/{job_id}/slide_{req.slide_id}.html",
+                "html_url": f"/outputs/{safe_id}/slide_{req.slide_id}.html",
                 "html": new_html,
                 "status": "updated",
             }
@@ -558,13 +558,13 @@ async def duplicate_slide(job_id: str, req: DuplicateSlideRequest):
     # Copy the HTML file on disk for the duplicated slide
     if idx < len(html_slides):
         original_html_path = html_slides[idx]
-        job_output_dir = _safe_job_dir(job_id)
+        job_output_dir, safe_id = _safe_job_dir(job_id)
         original_file = os.path.join(job_output_dir, f"slide_{req.slide_id}.html")
         new_id = req.slide_id + 1
         new_file = os.path.join(job_output_dir, f"slide_{new_id}.html")
         if os.path.isfile(original_file):
             shutil.copy2(original_file, new_file)
-        new_html_path = f"/outputs/{os.path.basename(job_id)}/slide_{new_id}.html"
+        new_html_path = f"/outputs/{safe_id}/slide_{new_id}.html"
     else:
         logger.warning("No HTML path found for slide %d in job %s", req.slide_id, job_id)
         new_html_path = ""
@@ -600,7 +600,7 @@ async def delete_slide(job_id: str, slide_id: int):
 
     # Remove the HTML file from disk
     if idx < len(html_slides):
-        job_output_dir = _safe_job_dir(job_id)
+        job_output_dir, safe_id = _safe_job_dir(job_id)
         slide_file = os.path.join(job_output_dir, f"slide_{slide_id}.html")
         if os.path.isfile(slide_file):
             os.remove(slide_file)

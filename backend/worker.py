@@ -86,14 +86,15 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
             structured_slides = []
 
         # Save HTML slides to job-specific directory
-        job_output_dir = os.path.join(settings.output_dir, job_id)
+        safe_id = os.path.basename(job_id)
+        job_output_dir = os.path.join(settings.output_dir, safe_id)
         os.makedirs(job_output_dir, exist_ok=True)
         html_slide_paths = []
         for idx, html in enumerate(html_slides):
             slide_path = os.path.join(job_output_dir, f"slide_{idx + 1}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
                 f.write(html)
-            html_slide_paths.append(f"/outputs/{job_id}/slide_{idx + 1}.html")
+            html_slide_paths.append(f"/outputs/{safe_id}/slide_{idx + 1}.html")
 
         set_job(job_id, status="completed", path=output_path, progress=100,
                 html_slides=html_slide_paths, structured_slides=structured_slides)
