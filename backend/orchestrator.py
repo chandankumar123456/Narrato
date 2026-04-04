@@ -148,7 +148,11 @@ async def run_pipeline(prompt: str, options: dict = {},
     logger.info(f"[pipeline] PPT generated: {output_path}")
     _report(95)
 
-    return output_path
+    return {
+        "pptx_path": output_path,
+        "html_slides": visual_output.get("html_slides", []),
+        "structured_slides": [s for s in (state.structured_slides or [])],
+    }
 
 
 def _write_intelligence_report(state: PresentationState) -> None:

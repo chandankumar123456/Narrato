@@ -73,9 +73,30 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
             update_job(job_id, progress=pct)
 
         from orchestrator import run_pipeline
-        output_path = _run_async(run_pipeline(prompt, options, progress_callback=_progress))
+        result = _run_async(run_pipeline(prompt, options, progress_callback=_progress))
 
-        set_job(job_id, status="completed", path=output_path, progress=100)
+        # Support both old (str) and new (dict) return formats
+        if isinstance(result, dict):
+            output_path = result["pptx_path"]
+            html_slides = result.get("html_slides", [])
+            structured_slides = result.get("structured_slides", [])
+        else:
+            output_path = result
+            html_slides = []
+            structured_slides = []
+
+        # Save HTML slides to job-specific directory
+        job_output_dir = os.path.join(settings.output_dir, job_id)
+        os.makedirs(job_output_dir, exist_ok=True)
+        html_slide_paths = []
+        for idx, html in enumerate(html_slides):
+            slide_path = os.path.join(job_output_dir, f"slide_{idx + 1}.html")
+            with open(slide_path, "w", encoding="utf-8") as f:
+                f.write(html)
+            html_slide_paths.append(f"/outputs/{job_id}/slide_{idx + 1}.html")
+
+        set_job(job_id, status="completed", path=output_path, progress=100,
+                html_slides=html_slide_paths, structured_slides=structured_slides)
         logger.info("[celery] Job %s completed: %s", job_id, output_path)
         return {"status": "completed", "path": output_path}
 
