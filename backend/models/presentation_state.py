@@ -48,6 +48,9 @@ class PresentationState(BaseModel):
     user_schema: Optional[dict] = None
     generation_mode: Optional[str] = None  # "strict" | "default" | None
 
+    # Intelligence report (Phase 5 evaluation output)
+    intelligence_report: Optional[str] = None
+
     @field_validator("slide_count", mode="before")
     @classmethod
     def clamp_slide_count(cls, v, info):
