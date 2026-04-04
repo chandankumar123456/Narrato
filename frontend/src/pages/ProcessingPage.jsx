@@ -23,10 +23,10 @@ export default function ProcessingPage({
     }
   }, [job_id, hookJobId, resumeJob]);
 
-  // Navigate to result page when done
+  // Navigate to editor page when done
   useEffect(() => {
     if (status === "done" && job_id) {
-      navigate(`/job/${job_id}/result`, { replace: true });
+      navigate(`/editor/${job_id}`, { replace: true });
     }
   }, [status, job_id, navigate]);
 
