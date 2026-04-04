@@ -367,8 +367,14 @@ async def stream_events(job_id: str, request: Request):
 
 
 def _safe_job_dir(job_id: str) -> tuple[str, str]:
-    """Return a validated (job_output_dir, safe_id) tuple, preventing path traversal."""
+    """Return a validated (job_output_dir, safe_id) tuple, preventing path traversal.
+
+    Validates safe_id contains no path separators and resolves within output_dir.
+    """
     safe_id = os.path.basename(job_id)
+    # Reject any remaining path separators or traversal attempts
+    if not safe_id or "/" in safe_id or "\\" in safe_id or ".." in safe_id:
+        raise HTTPException(status_code=400, detail="Invalid job_id: path traversal rejected")
     job_dir = os.path.realpath(os.path.join(settings.output_dir, safe_id))
     real_output = os.path.realpath(settings.output_dir)
     try:
@@ -600,34 +606,62 @@ def _renumber_html_slides(job_id: str, html_slides: list[str]) -> list[str]:
 
     Reads existing HTML content from old paths, writes to new sequential paths,
     and cleans up stale files. Returns the updated list of html_slide paths.
+
+    Security: validates every resolved filepath is within job_output_dir.
+    Uses a temp directory to avoid partial state on failure.
     """
     job_output_dir, safe_id = _safe_job_dir(job_id)
     os.makedirs(job_output_dir, exist_ok=True)
+    real_job_dir = os.path.realpath(job_output_dir)
 
-    # Read all existing HTML content
+    # Read all existing HTML content — validate each path is within job dir
     contents = []
     for path_url in html_slides:
-        # path_url is like /outputs/{safe_id}/slide_N.html
+        # path_url is like /outputs/{safe_id}/slide_N.html — extract basename
         filename = os.path.basename(path_url)
-        filepath = os.path.join(job_output_dir, filename)
+        # Reject filenames containing path separators or suspicious chars
+        if "/" in filename or "\\" in filename or ".." in filename:
+            contents.append("")
+            continue
+        filepath = os.path.realpath(os.path.join(job_output_dir, filename))
+        # Ensure resolved path is within the job output directory
+        try:
+            if os.path.commonpath([filepath, real_job_dir]) != real_job_dir:
+                contents.append("")
+                continue
+        except ValueError:
+            contents.append("")
+            continue
         content = ""
         if os.path.isfile(filepath):
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
         contents.append(content)
 
-    # Remove all existing slide files in the directory
-    for existing in glob.glob(os.path.join(job_output_dir, "slide_*.html")):
-        os.remove(existing)
-
-    # Write new sequential files
+    # Write new files to a temp directory first (atomic swap)
+    import tempfile
+    tmp_dir = tempfile.mkdtemp(dir=job_output_dir)
     new_paths = []
-    for idx, content in enumerate(contents):
-        new_num = idx + 1
-        new_file = os.path.join(job_output_dir, f"slide_{new_num}.html")
-        with open(new_file, "w", encoding="utf-8") as f:
-            f.write(content)
-        new_paths.append(f"/outputs/{safe_id}/slide_{new_num}.html")
+    try:
+        for idx, content in enumerate(contents):
+            new_num = idx + 1
+            tmp_file = os.path.join(tmp_dir, f"slide_{new_num}.html")
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                f.write(content)
+            new_paths.append(f"/outputs/{safe_id}/slide_{new_num}.html")
+
+        # Remove old slide files
+        for existing in glob.glob(os.path.join(job_output_dir, "slide_*.html")):
+            os.remove(existing)
+
+        # Move new files into place
+        for fname in os.listdir(tmp_dir):
+            shutil.move(os.path.join(tmp_dir, fname),
+                        os.path.join(job_output_dir, fname))
+    finally:
+        # Clean up temp directory
+        if os.path.isdir(tmp_dir):
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return new_paths
 
