@@ -195,9 +195,9 @@ Return JSON:
         logger.error("[narrative] LLM narrative generation failed: %s", exc)
         raise  # Let pipeline handle the failure
 
-    if not sections or len(sections) < 5:
+    if not sections or len(sections) != 12:
         raise ValueError(
-            f"Narrative generation produced {len(sections)} sections, expected 12"
+            f"Narrative generation produced {len(sections)} sections, expected exactly 12"
         )
 
     # ── Convert narrative sections into slide plan + structured slides ──

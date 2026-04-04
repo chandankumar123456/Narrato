@@ -226,7 +226,7 @@ class TestGenerateNarrative:
     async def test_insufficient_sections_raises(self, state):
         with patch("pipeline.narrative_generator.call_llm_json", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = {"sections": [{"section_id": "problem", "title": "P", "body": ["x"], "key_insight": "y"}]}
-            with pytest.raises(ValueError, match="expected 12"):
+            with pytest.raises(ValueError, match="expected exactly 12"):
                 await generate_narrative(state)
 
     @pytest.mark.asyncio

@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 class PipelineFailure(Exception):
-    """Raised when a pipeline stage fails after max retries."""
+    """Raised when a critical pipeline stage fails, stopping the pipeline immediately."""
     pass
 
 
