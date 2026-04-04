@@ -78,7 +78,7 @@ def _render_slide(slide, slide_data: dict, theme: ThemeConfig):
         title_slide, section_header, agenda_slide, problem_slide,
         stats_slide, feature_slide, comparison_slide, timeline_slide,
         example_slide, quote_slide, image_slide, conclusion_slide,
-        cta_slide, thank_you_slide,
+        cta_slide, thank_you_slide, example_detail_slide,
     )
 
     dispatch = {
@@ -91,6 +91,7 @@ def _render_slide(slide, slide_data: dict, theme: ThemeConfig):
         "comparison_slide": comparison_slide.render,
         "timeline_slide": timeline_slide.render,
         "example_slide": example_slide.render,
+        "example_detail_slide": example_detail_slide.render,
         "quote_slide": quote_slide.render,
         "image_slide": image_slide.render,
         "conclusion_slide": conclusion_slide.render,
