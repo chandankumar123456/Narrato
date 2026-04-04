@@ -1,8 +1,12 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 /**
  * Center canvas — renders the active slide in an iframe with
- * hover overlay actions (edit, regenerate, duplicate).
+ * proper 16:9 scaling and hover overlay actions.
+ *
+ * Slides are authored at 1920×1080. This component scales them
+ * to fit the available viewport while maintaining aspect ratio,
+ * using a CSS transform approach (no content modification).
  */
 export default function SlideCanvas({
   slide,
@@ -16,6 +20,27 @@ export default function SlideCanvas({
 }) {
   const [hovered, setHovered] = useState(false);
   const iframeRef = useRef(null);
+  const containerRef = useRef(null);
+  const [scale, setScale] = useState(0.5);
+
+  // Compute scale factor so 1920×1080 slide fits inside container
+  const updateScale = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const padding = 48; // 24px each side
+    const availW = container.clientWidth - padding;
+    const availH = container.clientHeight - padding;
+    if (availW <= 0 || availH <= 0) return;
+    const scaleX = availW / 1920;
+    const scaleY = availH / 1080;
+    setScale(Math.min(scaleX, scaleY));
+  }, []);
+
+  useEffect(() => {
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
+  }, [updateScale]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -55,6 +80,9 @@ export default function SlideCanvas({
     ? `${slide.html_url}?t=${slide.cacheKey || ""}`
     : null;
 
+  const scaledW = Math.round(1920 * scale);
+  const scaledH = Math.round(1080 * scale);
+
   return (
     <div className="flex-1 flex flex-col bg-[#0a0a0f] overflow-hidden">
       {/* Navigation Bar */}
@@ -93,13 +121,16 @@ export default function SlideCanvas({
 
       {/* Canvas Area */}
       <div
+        ref={containerRef}
         className="flex-1 flex items-center justify-center p-6 relative"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        {/* Slide Frame */}
-        <div className="relative w-full max-w-5xl aspect-[16/9] rounded-lg overflow-hidden shadow-2xl
-          ring-1 ring-white/5">
+        {/* Slide Frame — fixed 1920×1080 scaled to fit */}
+        <div
+          className="relative rounded-lg overflow-hidden shadow-2xl ring-1 ring-white/5"
+          style={{ width: scaledW, height: scaledH }}
+        >
           {isLoading ? (
             <div className="w-full h-full bg-[#1a1a24] flex items-center justify-center">
               <div className="flex flex-col items-center gap-3">
@@ -112,7 +143,13 @@ export default function SlideCanvas({
               ref={iframeRef}
               srcDoc={slide.html}
               title={`Slide ${slideIndex + 1}`}
-              className="w-full h-full border-0"
+              className="border-0"
+              style={{
+                width: 1920,
+                height: 1080,
+                transform: `scale(${scale})`,
+                transformOrigin: "top left",
+              }}
               sandbox="allow-same-origin allow-scripts"
             />
           ) : slideUrl ? (
@@ -120,7 +157,13 @@ export default function SlideCanvas({
               ref={iframeRef}
               src={slideUrl}
               title={`Slide ${slideIndex + 1}`}
-              className="w-full h-full border-0"
+              className="border-0"
+              style={{
+                width: 1920,
+                height: 1080,
+                transform: `scale(${scale})`,
+                transformOrigin: "top left",
+              }}
               sandbox="allow-same-origin allow-scripts"
             />
           ) : (

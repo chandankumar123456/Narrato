@@ -4,11 +4,11 @@ Visual Rendering Pipeline — Orchestrates Stages 1–4
 Executes in strict sequential order:
   1. Design Engine   → layout, components, theme
   2. Template Engine  → HTML/Tailwind CSS
-  3. Rendering Engine → Playwright PNG/PDF
-  4. Export Engine    → HTML + legacy PPT
+  3. Rendering Engine → Playwright PNG/PDF (sync)
+  4. Export Engine    → HTML files
 
 This module is called from the main orchestrator after content is
-finalized and before the traditional PPT generation step.
+finalized.
 """
 
 import logging
@@ -42,8 +42,6 @@ async def run_visual_pipeline(state) -> dict:
             "html_paths": [...],        # saved HTML file paths
             "image_paths": [...],       # PNG paths (if rendered)
             "pdf_path": str | None,     # PDF path (if rendered)
-            "ppt_path": str | None,     # image-based PPT path
-            "ppt_structure": {…},       # legacy PPT structure
         }
     """
     slides = state.structured_slides or []
@@ -62,17 +60,12 @@ async def run_visual_pipeline(state) -> dict:
     logger.info("[visual_pipeline] Stage 2: Template Engine")
     html_slides = run_template_engine(designs)
 
-    # ── Stage 3: Rendering Engine (SKIP if Playwright missing) ──
-    has_playwright = _check_playwright()
-    if has_playwright:
-        logger.info("[visual_pipeline] Stage 3: Rendering Engine")
-        try:
-            render_result = await run_rendering_engine(html_slides, output_dir)
-        except Exception as exc:
-            logger.warning("[visual_pipeline] Rendering failed: %s — continuing without images", exc)
-            render_result = _empty_render_result(len(html_slides))
-    else:
-        logger.info("[visual_pipeline] Stage 3: SKIPPED (Playwright not installed)")
+    # ── Stage 3: Rendering Engine (sync, graceful degradation) ──
+    logger.info("[visual_pipeline] Stage 3: Rendering Engine")
+    try:
+        render_result = run_rendering_engine(html_slides, output_dir)
+    except Exception as exc:
+        logger.warning("[visual_pipeline] Rendering failed: %s — continuing without images", exc)
         render_result = _empty_render_result(len(html_slides))
 
     # ── Stage 4: Export Engine ──────────────────────────────────
@@ -92,29 +85,17 @@ async def run_visual_pipeline(state) -> dict:
         "html_paths": export_result["html_paths"],
         "image_paths": export_result["image_paths"],
         "pdf_path": export_result["pdf_path"],
-        "ppt_path": export_result["ppt_path"],
-        "ppt_structure": export_result["ppt_structure"],
     }
 
     logger.info(
-        "[visual_pipeline] Complete: %d designs, %d HTML, %d images, pdf=%s, ppt=%s",
+        "[visual_pipeline] Complete: %d designs, %d HTML, %d images, pdf=%s",
         len(designs),
         len(html_slides),
         len(result["image_paths"]),
         bool(result["pdf_path"]),
-        bool(result["ppt_path"]),
     )
 
     return result
-
-
-def _check_playwright() -> bool:
-    """Check if Playwright is importable without calling any subprocess."""
-    try:
-        from playwright.async_api import async_playwright  # noqa: F401
-        return True
-    except ImportError:
-        return False
 
 
 def _empty_render_result(slide_count: int) -> dict:
@@ -143,6 +124,4 @@ def _empty_result() -> dict:
         "html_paths": [],
         "image_paths": [],
         "pdf_path": None,
-        "ppt_path": None,
-        "ppt_structure": {"slides": []},
     }

@@ -31,7 +31,6 @@ from pipeline.visual_template_engine import (
 )
 from pipeline.visual_rendering_engine import build_render_instructions
 from pipeline.visual_export_engine import (
-    build_ppt_structure,
     save_html_slides,
     run_export_engine,
 )
@@ -327,7 +326,6 @@ class TestRenderingEngine:
         assert instr["slide_count"] == 5
         assert "png" in instr["export"]
         assert "pdf" in instr["export"]
-        assert "ppt" in instr["export"]
         assert instr["quality"]["no_overflow"] is True
         assert instr["quality"]["fixed_viewport"] is True
 
@@ -342,17 +340,6 @@ class TestRenderingEngine:
 
 
 class TestExportEngine:
-    def test_ppt_structure(self):
-        paths = ["/tmp/slide_1.png", "/tmp/slide_2.png", "/tmp/slide_3.png"]
-        structure = build_ppt_structure(paths)
-        assert len(structure["slides"]) == 3
-        assert structure["slides"][0]["image"] == "slide_1.png"
-        assert structure["slides"][2]["image"] == "slide_3.png"
-
-    def test_ppt_structure_empty(self):
-        structure = build_ppt_structure([])
-        assert structure["slides"] == []
-
     def test_save_html_slides(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             html_slides = [
@@ -376,8 +363,8 @@ class TestExportEngine:
                 output_dir=tmpdir,
             )
             assert len(result["html_paths"]) == 1
-            assert result["ppt_structure"]["slides"] == []
-            assert result["ppt_path"] is None
+            assert result["image_paths"] == []
+            assert result["pdf_path"] is None
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -412,9 +399,6 @@ class TestVisualPipeline:
         # Render instructions
         assert result["render_instructions"]["viewport"] == "1920x1080"
         assert result["render_instructions"]["slide_count"] == 5
-
-        # PPT structure
-        assert "slides" in result["ppt_structure"]
 
         # HTML paths (saved to disk)
         for p in result["html_paths"]:
