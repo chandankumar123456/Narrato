@@ -283,12 +283,12 @@ async def _run_visual_export_safe(html_slides: list[str], output_dir: str) -> di
     pdf_path = None
 
     try:
-        image_paths = render_slides_to_images(html_slides, output_dir)
+        image_paths = await render_slides_to_images(html_slides, output_dir)
     except Exception as exc:
         logger.warning("[pipeline] Image rendering failed: %s — continuing without images", exc)
 
     try:
-        pdf_path = render_slides_to_pdf(html_slides, output_dir)
+        pdf_path = await render_slides_to_pdf(html_slides, output_dir)
     except Exception as exc:
         logger.warning("[pipeline] PDF rendering failed: %s — continuing without PDF", exc)
 
