@@ -96,7 +96,7 @@ async def run_pipeline(prompt: str, options: dict = {},
         evals = (state.metadata or {}).get("slide_evaluations", [])
         avg_score = (
             round(sum(e.get("overall_score", 0) for e in evals) / len(evals), 1)
-            if evals else 0
+            if len(evals) > 0 else 0
         )
         logger.info(
             "[pipeline] Slide evaluation complete: %d slides, avg score %.1f/5",

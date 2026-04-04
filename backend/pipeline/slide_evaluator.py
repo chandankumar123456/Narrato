@@ -48,6 +48,9 @@ GENERIC_PHRASES = [
     "best-in-class",
 ]
 
+# Pre-formatted for prompt injection (avoids repeated JSON serialization)
+_GENERIC_PHRASES_STR = json.dumps(GENERIC_PHRASES)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Public API
@@ -397,7 +400,7 @@ You are given a WEAK slide and specific instructions on what to fix.
 
 STRICT RULES:
 1. Each bullet MUST include a concrete mechanism (how it works) OR a specific structural detail.
-2. FORBIDDEN phrases: {json.dumps(GENERIC_PHRASES)}
+2. FORBIDDEN phrases: {_GENERIC_PHRASES_STR}
 3. Every bullet must have at least {MIN_BULLET_WORDS} meaningful words.
 4. Content must be specific to "{state.topic}" — not reusable for other topics.
 5. Content must NOT repeat ideas from previous slides.
