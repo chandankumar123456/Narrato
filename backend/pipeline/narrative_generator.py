@@ -1,235 +1,261 @@
-"""Narrative-first content generator.
-
-Generates a FULL structured narrative in ONE LLM call, then splits it into slides.
-This replaces the slide-by-slide generation approach for speed and coherence.
-
-The narrative follows a strict 12-section progression:
-  1. Problem (specific instance)
-  2. Who experiences it
-  3. Root cause
-  4. Why current systems fail
-  5. Product concept
-  6. How it works (mechanism)
-  7. Why it's hard to copy
-  8. Business model (pricing, who pays)
-  9. Market expansion
-  10. Traction (must include metrics)
-  11. Go-to-market
-  12. Vision
-"""
+"""Narrative-first content generator with hard narrative enforcement."""
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+import re
+from typing import Iterable
 
 from models.presentation_state import PresentationState
 from services.llm_client import call_llm_json
 
 logger = logging.getLogger(__name__)
 
-# The 12 narrative sections in strict order.
 NARRATIVE_SECTIONS = [
     {
         "id": "problem",
         "title": "Problem",
-        "instruction": "Describe a specific, concrete instance of the problem. Name an actual scenario with real actors and real consequences. Do NOT use abstract language.",
-        "dimension": "actor",
+        "dimension": "specific real-world scenario",
+        "instruction": "Describe one real-world failure with time, place, and product context. Do not mention the product idea or benefits.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
     {
-        "id": "who_experiences",
-        "title": "Who Experiences It",
-        "instruction": "Identify the specific people, roles, or organizations that suffer from this problem. Include their daily workflow and how the problem disrupts it.",
-        "dimension": "workflow",
+        "id": "actor",
+        "title": "Actor",
+        "dimension": "who experiences the problem",
+        "instruction": "Name the exact role and workflow affected. Focus only on who they are and what work breaks.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
     {
         "id": "root_cause",
         "title": "Root Cause",
-        "instruction": "Explain the structural or systemic reason this problem exists. Name the specific technical, organizational, or economic failure that causes it.",
-        "dimension": "system",
+        "dimension": "why the problem happens structurally",
+        "instruction": "Explain the structural reason the problem happens. Focus on the failure source, not the current tools or the product.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
     {
-        "id": "why_current_fail",
-        "title": "Why Current Systems Fail",
-        "instruction": "Name specific existing solutions or approaches and explain exactly why each one fails. Reference concrete limitations, not generic claims.",
-        "dimension": "mechanism",
+        "id": "system_gap",
+        "title": "System Gap",
+        "dimension": "why current tools fail",
+        "instruction": "List the specific limitations of current tools. Do not describe your product or broad market claims.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
     {
-        "id": "product_concept",
-        "title": "Product Concept",
-        "instruction": "Describe the product in one clear sentence. State what it does, for whom, and what makes it fundamentally different. No buzzwords.",
-        "dimension": "actor",
+        "id": "product",
+        "title": "Product",
+        "dimension": "what the product is",
+        "instruction": "Define the product only. State what it is for whom, without benefits, traction, or go-to-market claims.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
     {
-        "id": "how_it_works",
-        "title": "How It Works",
-        "instruction": "Walk through the exact mechanism step by step. Name specific data inputs, processing steps, and outputs. Describe what happens at each stage.",
-        "dimension": "mechanism",
+        "id": "mechanism",
+        "title": "Mechanism",
+        "dimension": "how it works",
+        "instruction": "Explain the mechanism strictly as input to processing to output. Include concrete data and resulting action.",
+        "content_format": "Actor: ...\nInput: ...\nProcessing: ...\nOutput: ...",
     },
     {
         "id": "defensibility",
-        "title": "Why It's Hard to Copy",
-        "instruction": "Explain the specific structural advantages: proprietary data, network effects, technical complexity, or regulatory barriers. Be concrete about each.",
-        "dimension": "system",
+        "title": "Defensibility",
+        "dimension": "why it is hard to copy",
+        "instruction": "Focus on data advantages, workflow lock-in, or switching barriers. Do not repeat the mechanism or product definition.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
     {
         "id": "business_model",
         "title": "Business Model",
-        "instruction": "State who pays, how much, and for what. Name the pricing model, contract structure, and revenue mechanics. Include specific numbers or ranges.",
-        "dimension": "economics",
+        "dimension": "who pays and how much",
+        "instruction": "State the exact payer, the pricing model, and when revenue is recognized. Include numbers.",
+        "content_format": "Payer: ...\nPricing: ...\nTrigger: ...\nOutput: ...",
     },
     {
         "id": "market_expansion",
         "title": "Market Expansion",
-        "instruction": "Describe the initial target market segment and the expansion path. Name specific verticals, geographies, or use cases for each phase.",
-        "dimension": "economics",
+        "dimension": "how adoption spreads",
+        "instruction": "Describe adoption in ordered steps from the initial wedge to expansion. Do not repeat go-to-market channels.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
     {
         "id": "traction",
         "title": "Traction",
-        "instruction": "Include specific metrics: revenue, users, growth rate, contracts signed, pilots completed. Every claim must have a number attached.",
-        "dimension": "metric",
+        "dimension": "proof with numbers",
+        "instruction": "Provide proof only: numeric metrics, usage frequency, and measurable improvement. No strategy language.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
     {
         "id": "go_to_market",
-        "title": "Go-to-Market",
-        "instruction": "Describe the specific acquisition channels, sales motion, and distribution strategy. Name partners, platforms, or tactics.",
-        "dimension": "adoption",
+        "title": "Go-To-Market",
+        "dimension": "how customers are acquired",
+        "instruction": "Describe acquisition channels, sales motion, and conversion path. Do not repeat adoption sequencing from market expansion.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
     {
         "id": "vision",
         "title": "Vision",
-        "instruction": "Describe the long-term end state. What does the world look like when this product succeeds at scale? Be specific about the transformation.",
-        "dimension": "actor",
+        "dimension": "future state",
+        "instruction": "Describe the long-term future state after adoption scales. Focus on what changes in the world, not present mechanics.",
+        "content_format": "Actor: ...\nAction: ...\nData: ...\nOutput: ...",
     },
 ]
 
-# Dimensions each section must introduce
-REQUIRED_DIMENSIONS = ["actor", "workflow", "system", "mechanism", "economics", "metric", "adoption"]
+EXPECTED_SECTION_IDS = [section["id"] for section in NARRATIVE_SECTIONS]
+REQUIRED_DIMENSIONS = [section["dimension"] for section in NARRATIVE_SECTIONS]
+COMMON_MARKERS = ("Actor:", "Action:", "Data:", "Output:")
+MECHANISM_MARKERS = ("Actor:", "Input:", "Processing:", "Output:")
+BUSINESS_MODEL_MARKERS = ("Payer:", "Pricing:", "Trigger:", "Output:")
 
-# Generic phrases that MUST NOT appear in output
 BANNED_PHRASES = [
-    "ai layer", "connected system", "decision engine",
-    "leveraging ai", "innovative solution", "cutting-edge",
-    "game-changing", "next-generation", "state-of-the-art",
-    "world-class", "best-in-class", "ai-powered",
-    "scalable", "seamless", "robust", "enhances",
+    "ai platform",
+    "connected layer",
+    "decision engine",
+    "leveraging ai",
+    "innovative solution",
+    "cutting-edge",
+    "game-changing",
+    "next-generation",
+    "state-of-the-art",
+    "world-class",
+    "best-in-class",
+    "ai-powered",
+    "scalable",
+    "seamless",
+    "robust",
+    "enhances",
     "improves efficiency",
+    "solution",
+    "engine",
+    "platform",
 ]
+
+STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "into", "is", "it",
+    "of", "on", "or", "that", "the", "their", "this", "to", "with", "who", "what", "when",
+    "where", "why", "how", "your", "our", "its", "than", "then", "after", "before", "during",
+    "actor", "action", "data", "output", "input", "processing", "payer", "pricing", "trigger",
+    "team", "teams", "step", "handling", "decisions", "workflow", "workflows", "change", "changes",
+}
+
+NUMBER_RE = re.compile(r"\b\d+(?:[.,]\d+)?\b")
+FREQUENCY_RE = re.compile(r"\b(daily|weekly|monthly|quarterly|per day|per week|per month|times per day|times per week)\b", re.I)
+IMPROVEMENT_RE = re.compile(
+    r"\b(\d+(?:[.,]\d+)?%|reduction|increase|decrease|lift|faster|lower|higher|fell|rose|reduced|grew|improved)\b",
+    re.I,
+)
+PRICING_RE = re.compile(r"\b(per\s+(unit|site|seat|location|shipment|account)|subscription|annual|monthly|usage-based|contract)\b", re.I)
+TRIGGER_RE = re.compile(r"\b(when|upon|after|at the time|charged|billed|invoice)\b", re.I)
 
 
 async def generate_narrative(state: PresentationState) -> PresentationState:
-    """Generate full structured narrative in ONE LLM call, then split into slides.
-
-    Returns updated state with:
-      - ``structured_slides`` populated from narrative sections
-      - ``slide_plan`` populated from narrative sections
-      - ``metadata["narrative_generation"]`` with generation info
-    """
+    """Generate a full 12-section narrative in one LLM call and map it to slides."""
     sections_json = json.dumps(
         [
             {
-                "section_id": s["id"],
-                "title": s["title"],
-                "instruction": s["instruction"],
-                "new_dimension": s["dimension"],
+                "id": section["id"],
+                "title": section["title"],
+                "dimension": section["dimension"],
+                "instruction": section["instruction"],
+                "content_format": section["content_format"],
             }
-            for s in NARRATIVE_SECTIONS
+            for section in NARRATIVE_SECTIONS
         ],
         indent=2,
     )
 
     banned_json = json.dumps(BANNED_PHRASES)
+    expected_ids_json = json.dumps(EXPECTED_SECTION_IDS)
 
-    system_prompt = f"""You are a world-class pitch deck narrative architect.
-You generate a COMPLETE structured narrative for a presentation in ONE response.
+    system_prompt = f"""You are a pitch-deck narrative architect.
+Generate the entire narrative in ONE pass.
 
-ABSOLUTE RULES:
-1. Each section MUST introduce NEW information not present in ANY other section.
-2. NO repetition across sections — each section covers a different dimension.
-3. NO generic phrases. BANNED: {banned_json}
-4. Replace ALL abstraction with: specific actors, specific workflows, specific data, specific outputs.
-5. Every claim must include a concrete mechanism, number, or named entity.
-6. The "Traction" section MUST include at least 3 specific metrics with numbers.
-7. The "Business Model" section MUST include pricing specifics.
-8. The "How It Works" section MUST describe step-by-step data flow.
+HARD RULES:
+1. Output EXACTLY 12 sections in this exact order: {expected_ids_json}
+2. Each section may talk ONLY about its assigned dimension and nothing else.
+3. Before writing each section, check all previous sections and SHIFT dimension if any explanation, mechanism, benefit, or phrasing overlaps.
+4. NO generic language. BANNED terms and phrases: {banned_json}
+5. Each section must be concrete and directly usable in slides.
+6. Every section must include actor, action, data, and output fields in content.
+7. Section "mechanism" must use Input -> Processing -> Output explicitly.
+8. Section "business_model" must include exact payer, pricing model, and revenue trigger.
+9. Section "traction" must include numbers, usage frequency, and measurable improvement.
+10. Do not add markdown, commentary, or any keys other than id, title, content, key_points.
 
-DIMENSION RULE: Each section introduces a NEW dimension from this set:
-[actor, workflow, system, mechanism, economics, metric, adoption]
-If a section overlaps with a previous one, rewrite it to introduce genuinely new information.
+NON-OVERLAP DIMENSIONS:
+- problem: specific real-world scenario only
+- actor: who experiences the problem only
+- root_cause: structural cause only
+- system_gap: limitations of current tools only
+- product: product definition only
+- mechanism: input -> processing -> output only
+- defensibility: hard-to-copy reasons only
+- business_model: payer + pricing + revenue trigger only
+- market_expansion: adoption spread sequence only
+- traction: proof with numbers only
+- go_to_market: acquisition channels and sales motion only
+- vision: future state only
 
-Return ONLY valid JSON. No markdown, no backticks, no preamble."""
+Return ONLY valid JSON."""
 
     user_prompt = f"""Topic: {state.topic}
 Presentation type: {state.presentation_type}
-Audience: {state.audience or "general"}
+Audience: {state.audience or 'general'}
 Tone: {state.tone}
 
-Generate a COMPLETE narrative with ALL 12 sections below.
-For each section, provide:
-- "title": section title (string)
-- "body": 3-4 bullet points, each a specific, mechanism-driven statement (list of strings)
-- "key_insight": one sentence summarizing the unique insight of this section (string)
+Generate a strict narrative progression where each section answers "why next?" without repeating prior sections.
 
-SECTIONS (generate ALL in order):
-{sections_json}
-
-Return JSON:
+Required JSON format:
 {{
   "sections": [
     {{
-      "section_id": "problem",
+      "id": "problem",
       "title": "...",
-      "body": ["bullet 1 with specific detail", "bullet 2 with mechanism", "bullet 3 with data"],
-      "key_insight": "One sentence unique insight"
-    }},
-    ... (all 12 sections)
+      "content": "Actor: ...\\nAction: ...\\nData: ...\\nOutput: ...",
+      "key_points": ["...", "...", "..."]
+    }}
   ]
-}}"""
+}}
+
+For EVERY section:
+- content must follow that section's exact content_format
+- key_points must contain 3 concise, non-repetitive facts
+- use specific actors, actions, data, and outputs
+- do not repeat mechanisms, benefits, or phrasing used earlier
+
+Sections:
+{sections_json}
+"""
 
     try:
         result = await call_llm_json(system_prompt, user_prompt)
-        sections = result.get("sections", [])
+        raw_sections = result.get("sections", [])
     except Exception as exc:
         logger.error("[narrative] LLM narrative generation failed: %s", exc)
-        raise  # Let pipeline handle the failure
+        raise
 
-    if not sections or len(sections) != 12:
-        raise ValueError(
-            f"Narrative generation produced {len(sections)} sections, expected exactly 12"
-        )
+    sections = _validate_sections(raw_sections)
 
-    # ── Convert narrative sections into slide plan + structured slides ──
-    slide_plan: list[dict] = []
-    structured_slides: list[dict] = []
+    slide_plan: list[dict] = [
+        {"slide_id": 1, "section": "intro", "purpose": "Title slide", "type": "title_slide"}
+    ]
+    structured_slides: list[dict] = [
+        {
+            "slide_id": 1,
+            "type": "title_slide",
+            "content": {
+                "title": state.topic,
+                "subtitle": _title_subtitle(sections[0]["content"]),
+                "presenter": "",
+            },
+        }
+    ]
 
-    # Title slide
-    slide_plan.append({
-        "slide_id": 1,
-        "section": "intro",
-        "purpose": "Title slide",
-        "type": "title_slide",
-    })
-    structured_slides.append({
-        "slide_id": 1,
-        "type": "title_slide",
-        "content": {
-            "title": state.topic,
-            "subtitle": sections[0].get("key_insight", "") if sections else "",
-            "presenter": "",
-        },
-    })
-
-    # Map each narrative section to 1 slide
-    slide_id = 2
     section_to_type = {
         "problem": "problem_slide",
-        "who_experiences": "feature_slide",
+        "actor": "feature_slide",
         "root_cause": "feature_slide",
-        "why_current_fail": "comparison_slide",
-        "product_concept": "feature_slide",
-        "how_it_works": "feature_slide",
+        "system_gap": "comparison_slide",
+        "product": "feature_slide",
+        "mechanism": "feature_slide",
         "defensibility": "feature_slide",
         "business_model": "stats_slide",
         "market_expansion": "feature_slide",
@@ -238,116 +264,267 @@ Return JSON:
         "vision": "conclusion_slide",
     }
 
-    for section in sections:
-        section_id = section.get("section_id", "unknown")
-        slide_type = section_to_type.get(section_id, "feature_slide")
-        title = section.get("title", section_id.replace("_", " ").title())
-        body = section.get("body", [])
-        key_insight = section.get("key_insight", "")
+    for slide_id, section in enumerate(sections, start=2):
+        slide_type = section_to_type[section["id"]]
+        slide_plan.append(
+            {
+                "slide_id": slide_id,
+                "section": section["id"],
+                "purpose": section["title"],
+                "type": slide_type,
+            }
+        )
+        structured_slides.append(
+            {
+                "slide_id": slide_id,
+                "type": slide_type,
+                "content": _build_slide_content(slide_type, section["title"], section["content"], section["key_points"]),
+            }
+        )
 
-        slide_plan.append({
-            "slide_id": slide_id,
-            "section": section_id,
-            "purpose": title,
-            "type": slide_type,
-        })
-
-        # Build content based on slide type
-        content = _build_slide_content(slide_type, title, body, key_insight)
-
-        structured_slides.append({
-            "slide_id": slide_id,
-            "type": slide_type,
-            "content": content,
-        })
-        slide_id += 1
-
-    # Thank you / CTA slide
-    slide_plan.append({
-        "slide_id": slide_id,
-        "section": "conclusion",
-        "purpose": "Call to action",
-        "type": "cta_slide",
-    })
-    structured_slides.append({
-        "slide_id": slide_id,
-        "type": "cta_slide",
-        "content": {
-            "title": "Get Started",
-            "cta_text": f"Learn more about {state.topic}",
-            "contact": "",
-        },
-    })
+    cta_slide_id = len(structured_slides) + 1
+    slide_plan.append(
+        {"slide_id": cta_slide_id, "section": "conclusion", "purpose": "Call to action", "type": "cta_slide"}
+    )
+    structured_slides.append(
+        {
+            "slide_id": cta_slide_id,
+            "type": "cta_slide",
+            "content": {
+                "title": "Get Started",
+                "cta_text": f"Review the {state.topic} narrative and move to diligence.",
+                "contact": "",
+            },
+        }
+    )
 
     meta = dict(state.metadata or {})
     meta["narrative_generation"] = {
         "sections_generated": len(sections),
         "slides_created": len(structured_slides),
         "method": "narrative_first_single_call",
+        "schema": "id_title_content_key_points",
     }
 
-    return state.model_copy(update={
-        "slide_plan": slide_plan,
-        "structured_slides": structured_slides,
-        "metadata": meta,
-    })
+    return state.model_copy(
+        update={
+            "slide_plan": slide_plan,
+            "structured_slides": structured_slides,
+            "metadata": meta,
+        }
+    )
 
 
-def _build_slide_content(
-    slide_type: str,
-    title: str,
-    body: list[str],
-    key_insight: str,
-) -> dict:
-    """Build slide content dict from narrative section data.
+def _validate_sections(raw_sections: list[dict]) -> list[dict]:
+    if len(raw_sections) != len(EXPECTED_SECTION_IDS):
+        raise ValueError(
+            f"Narrative generation produced {len(raw_sections)} sections, expected exactly 12"
+        )
 
-    Does NOT call LLM — purely structural mapping.
-    """
+    sections: list[dict] = []
+    previous_claims: list[set[str]] = []
+
+    for index, section in enumerate(raw_sections):
+        expected = NARRATIVE_SECTIONS[index]
+        validated = _validate_single_section(section, expected)
+        current_claims = _claim_fingerprint(validated)
+        for prior_index, prior_claims in enumerate(previous_claims):
+            overlap = _claims_overlap(current_claims, prior_claims)
+            if overlap:
+                raise ValueError(
+                    f"Narrative sections overlap: '{validated['id']}' repeats '{EXPECTED_SECTION_IDS[prior_index]}' via {sorted(overlap)[0]}"
+                )
+        previous_claims.append(current_claims)
+        sections.append(validated)
+
+    return sections
+
+
+def _validate_single_section(section: dict, expected: dict) -> dict:
+    if not isinstance(section, dict):
+        raise ValueError("Each narrative section must be an object")
+
+    required_keys = {"id", "title", "content", "key_points"}
+    if set(section.keys()) != required_keys:
+        raise ValueError(f"Section keys invalid for {expected['id']}: expected {sorted(required_keys)}")
+
+    section_id = section.get("id")
+    if section_id != expected["id"]:
+        raise ValueError(f"Section order invalid: expected '{expected['id']}', got '{section_id}'")
+
+    title = _require_non_empty_string(section.get("title"), f"title for {section_id}")
+    content = _require_non_empty_string(section.get("content"), f"content for {section_id}")
+    key_points = section.get("key_points")
+    if not isinstance(key_points, list) or len(key_points) != 3:
+        raise ValueError(f"Section '{section_id}' must include exactly 3 key_points")
+    clean_points = [_require_non_empty_string(point, f"key_point for {section_id}") for point in key_points]
+    if len({_normalize_text(point) for point in clean_points}) != len(clean_points):
+        raise ValueError(f"Section '{section_id}' contains duplicate key_points")
+
+    _reject_generic_language(section_id, [title, content, *clean_points])
+    _validate_required_markers(section_id, content)
+    _validate_actor_action_data_output(section_id, content)
+    _validate_section_specific_rules(section_id, content, clean_points)
+
+    return {"id": section_id, "title": title, "content": content, "key_points": clean_points}
+
+
+def _reject_generic_language(section_id: str, texts: Iterable[str]) -> None:
+    blob = "\n".join(texts).lower()
+    for phrase in BANNED_PHRASES:
+        if re.search(rf"\b{re.escape(phrase)}\b", blob):
+            raise ValueError(f"Section '{section_id}' contains banned generic phrase '{phrase}'")
+
+
+def _validate_required_markers(section_id: str, content: str) -> None:
+    required = COMMON_MARKERS
+    if section_id == "mechanism":
+        required = MECHANISM_MARKERS
+    elif section_id == "business_model":
+        required = BUSINESS_MODEL_MARKERS
+
+    missing = [marker for marker in required if marker not in content]
+    if missing:
+        raise ValueError(f"Section '{section_id}' missing required markers: {', '.join(missing)}")
+
+
+def _validate_actor_action_data_output(section_id: str, content: str) -> None:
+    if section_id == "business_model":
+        segments = {label: _extract_labeled_value(content, label) for label in ("Payer:", "Pricing:", "Trigger:", "Output:")}
+    elif section_id == "mechanism":
+        segments = {label: _extract_labeled_value(content, label) for label in ("Actor:", "Input:", "Processing:", "Output:")}
+    else:
+        segments = {label: _extract_labeled_value(content, label) for label in COMMON_MARKERS}
+
+    empty = [label for label, value in segments.items() if not value]
+    if empty:
+        raise ValueError(f"Section '{section_id}' has empty required fields: {', '.join(empty)}")
+
+
+def _validate_section_specific_rules(section_id: str, content: str, key_points: list[str]) -> None:
+    blob = "\n".join([content, *key_points])
+
+    if section_id == "mechanism":
+        if not all(marker in content for marker in MECHANISM_MARKERS):
+            raise ValueError("Section 'mechanism' must follow Input -> Processing -> Output")
+
+    if section_id == "traction":
+        if not NUMBER_RE.search(blob):
+            raise ValueError("Section 'traction' must include numbers")
+        if not FREQUENCY_RE.search(blob):
+            raise ValueError("Section 'traction' must include usage frequency")
+        if not IMPROVEMENT_RE.search(blob):
+            raise ValueError("Section 'traction' must include measurable improvement")
+
+    if section_id == "business_model":
+        if not PRICING_RE.search(blob):
+            raise ValueError("Section 'business_model' must include pricing logic")
+        if not TRIGGER_RE.search(blob):
+            raise ValueError("Section 'business_model' must include a revenue trigger")
+        if not NUMBER_RE.search(blob):
+            raise ValueError("Section 'business_model' must include exact pricing numbers")
+
+
+def _claim_fingerprint(section: dict) -> set[str]:
+    claims = set()
+    content_parts = []
+    for line in section["content"].splitlines():
+        if ":" in line:
+            _, value = line.split(":", 1)
+            content_parts.append(value.strip())
+        else:
+            content_parts.append(line.strip())
+    for text in [*content_parts, *section["key_points"]]:
+        normalized = _normalize_text(text)
+        claims.update(_normalized_phrases(normalized))
+    return claims
+
+
+def _claims_overlap(current: set[str], prior: set[str]) -> set[str]:
+    overlap = current & prior
+    return {claim for claim in overlap if len(claim.split()) >= 4}
+
+
+def _normalized_phrases(text: str) -> set[str]:
+    tokens = [token for token in re.findall(r"[a-z0-9]+", text) if token not in STOPWORDS]
+    phrases = set()
+    for size in (5, 6, 7):
+        for index in range(len(tokens) - size + 1):
+            phrases.add(" ".join(tokens[index:index + size]))
+    return phrases
+
+
+def _extract_labeled_value(content: str, label: str) -> str:
+    pattern = rf"{re.escape(label)}\s*(.+?)(?=\n[A-Z][A-Za-z\- ]+:|\Z)"
+    match = re.search(pattern, content, re.S)
+    return match.group(1).strip() if match else ""
+
+
+def _build_slide_content(slide_type: str, title: str, content: str, key_points: list[str]) -> dict:
+    """Build slide content without extra LLM calls."""
     if slide_type == "problem_slide":
         cards = [
-            {"icon": "⚠", "label": f"Issue {i+1}", "description": b}
-            for i, b in enumerate(body[:4])
+            {"icon": "⚠", "label": _short_label(point, i, "Problem"), "description": point}
+            for i, point in enumerate(key_points)
         ]
         return {"title": title, "cards": cards}
 
-    elif slide_type == "comparison_slide":
-        # Split body into left (current) vs right (better)
-        mid = len(body) // 2
+    if slide_type == "comparison_slide":
         return {
             "title": title,
-            "left_label": "Current State",
-            "left_points": body[:mid] if mid > 0 else body[:2],
-            "right_label": "Better Approach",
-            "right_points": body[mid:] if mid > 0 else body[2:],
+            "left_label": "Current Tools",
+            "left_points": key_points[:2],
+            "right_label": "Observed Gaps",
+            "right_points": key_points[2:] + [_summary_line(content)],
         }
 
-    elif slide_type == "stats_slide":
-        # Use key_insight as main stat description
+    if slide_type == "stats_slide":
         return {
             "title": title,
-            "stat": body[0] if body else "",
-            "stat_label": key_insight,
-            "description": " | ".join(body[1:3]) if len(body) > 1 else "",
-            "source": body[-1] if len(body) > 3 else "",
+            "stat": key_points[0],
+            "stat_label": _summary_line(content),
+            "description": " | ".join(key_points[1:]),
+            "source": _summary_line(content, fallback="Verified operating data"),
         }
 
-    elif slide_type == "conclusion_slide":
-        return {
-            "title": title,
-            "bullets": body[:4],
-            "key_takeaway": key_insight,
-        }
+    if slide_type == "conclusion_slide":
+        return {"title": title, "bullets": key_points, "key_takeaway": _summary_line(content)}
 
-    else:
-        # Default: feature_slide
-        features = [
-            {"icon": _get_icon(i), "label": b.split(".")[0][:60] if "." in b else b[:60], "description": b}
-            for i, b in enumerate(body[:4])
-        ]
-        return {"title": title, "features": features}
+    features = [
+        {"icon": _get_icon(i), "label": _short_label(point, i, title), "description": point}
+        for i, point in enumerate(key_points)
+    ]
+    return {"title": title, "features": features, "summary": _summary_line(content)}
+
+
+def _title_subtitle(content: str) -> str:
+    return _summary_line(content, fallback="Structured narrative generated in one pass.")
+
+
+def _summary_line(content: str, fallback: str = "") -> str:
+    parts = [line.strip() for line in content.splitlines() if ":" in line]
+    summary = " | ".join(parts[:2]).strip()
+    return summary or fallback
+
+
+def _short_label(text: str, index: int, fallback: str) -> str:
+    cleaned = text.split(":", 1)[0].strip()
+    if cleaned and len(cleaned.split()) <= 6:
+        return cleaned
+    words = text.split()
+    return " ".join(words[:4]) if words else f"{fallback} {index + 1}"
 
 
 def _get_icon(index: int) -> str:
-    """Return a distinct icon for each feature position."""
     icons = ["🔹", "🔸", "⚡", "🎯", "📊", "🔑", "💡", "🚀"]
     return icons[index % len(icons)]
+
+
+def _require_non_empty_string(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Missing {label}")
+    return value.strip()
+
+
+def _normalize_text(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", " ", text.lower())).strip()
