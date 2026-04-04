@@ -8,6 +8,7 @@ from pipeline.slide_type_assigner import assign_slide_types
 from pipeline.content_structurer import generate_structured_content
 from pipeline.multi_stage_content import generate_multi_stage_content
 from pipeline.slide_evaluator import evaluate_and_improve_slides
+from pipeline.deck_consistency_optimizer import optimize_deck_consistency
 from pipeline.intelligence_report import generate_intelligence_report
 from pipeline.strict_slide_planner import plan_slides_strict
 from pipeline.strict_content_structurer import generate_strict_content
@@ -103,6 +104,16 @@ async def run_pipeline(prompt: str, options: dict = {},
             len(evals), avg_score,
         )
         _report(60)
+
+        # Deck-level consistency optimization: tone, depth, terminology,
+        # bullet structure alignment across all slides
+        state = await optimize_deck_consistency(state)
+        consistency = (state.metadata or {}).get("deck_consistency", {})
+        logger.info(
+            "[pipeline] Deck consistency pass: %d slides rewritten",
+            consistency.get("slides_rewritten", 0),
+        )
+        _report(65)
 
     # ── Shared tail (both paths) ──────────────────────────────────
     state = await generate_visual_queries(state)
