@@ -97,11 +97,12 @@ def _render_split(components: dict, theme: dict) -> str:
     card_border = theme["card_border"]
 
     items = components.get("items", [])
-    bullets_html = ""
+    bullet_parts = []
     for item in items[:4]:
         text = _esc(item.get("text", ""))
         if text:
-            bullets_html += f'      <li class="mb-3">{text}</li>\n'
+            bullet_parts.append(f'      <li class="mb-3">{text}</li>')
+    bullets_html = "\n".join(bullet_parts)
 
     return f"""\
 <div class="flex w-full max-w-6xl mx-auto gap-12">

@@ -270,10 +270,9 @@ async def get_visual_slides(job_id: str):
         raise HTTPException(status_code=404, detail="Job not completed")
 
     # List available visual assets
-    visual_subdir = os.path.join(VISUAL_DIR)
-    html_files = sorted(glob.glob(os.path.join(visual_subdir, "*.html")))
-    png_files = sorted(glob.glob(os.path.join(visual_subdir, "*.png")))
-    pdf_files = sorted(glob.glob(os.path.join(visual_subdir, "*.pdf")))
+    html_files = sorted(glob.glob(os.path.join(VISUAL_DIR, "*.html")))
+    png_files = sorted(glob.glob(os.path.join(VISUAL_DIR, "*.png")))
+    pdf_files = sorted(glob.glob(os.path.join(VISUAL_DIR, "*.pdf")))
 
     return {
         "html_slides": [f"/visual/{os.path.basename(f)}" for f in html_files],
