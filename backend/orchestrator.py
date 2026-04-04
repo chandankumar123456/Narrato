@@ -322,7 +322,7 @@ def _resolve_output_dir() -> str:
     return visual_dir
 
 
-def _inject_fallback_slides(state) -> object:
+def _inject_fallback_slides(state: "PresentationState") -> "PresentationState":
     """Inject minimal fallback slides so the pipeline always produces output."""
     fallback_slides = [
         {

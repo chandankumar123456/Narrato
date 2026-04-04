@@ -12,7 +12,10 @@ from models.presentation_state import PresentationState
 from pipeline.narrative_generator import (
     BANNED_PHRASES,
     EXPECTED_SECTION_IDS,
+    FREQUENCY_RE,
+    IMPROVEMENT_RE,
     NARRATIVE_SECTIONS,
+    NUMBER_RE,
     SECTION_ROLES,
     _auto_fix_overlap,
     _build_slide_content,
@@ -296,7 +299,6 @@ class TestValidationHelpers:
         assert len(sections) == 12
         # Verify metrics were injected
         blob = "\n".join([sections[9]["content"], *sections[9]["key_points"]])
-        from pipeline.narrative_generator import NUMBER_RE, FREQUENCY_RE
         assert NUMBER_RE.search(blob) or FREQUENCY_RE.search(blob)
 
     def test_validate_sections_soft_fixes_business_model_without_trigger(self):
@@ -501,19 +503,16 @@ class TestSoftValidationEngine:
         assert len(result) > 0
 
     def test_soft_validation_injects_frequency_for_traction(self):
-        from pipeline.narrative_generator import FREQUENCY_RE
         content = "Actor: ops\nAction: reviews adoption\nData: signals\nOutput: better"
         result = soft_validation_failure("traction", "must include usage frequency", content)
         assert FREQUENCY_RE.search(result)
 
     def test_soft_validation_injects_numbers_for_traction(self):
-        from pipeline.narrative_generator import NUMBER_RE
         content = "Actor: ops\nAction: reviews adoption\nData: signals\nOutput: better"
         result = soft_validation_failure("traction", "must include numbers", content)
         assert NUMBER_RE.search(result)
 
     def test_soft_validation_injects_improvement_for_traction(self):
-        from pipeline.narrative_generator import IMPROVEMENT_RE
         content = "Actor: ops\nAction: reviews adoption\nData: signals\nOutput: better"
         result = soft_validation_failure("traction", "must include measurable improvement", content)
         assert IMPROVEMENT_RE.search(result)
@@ -533,7 +532,6 @@ class TestAutoRewriteInvalidSections:
     """Tests for the auto_rewrite_invalid_sections post-validation pass."""
 
     def test_traction_gets_metrics_injected(self):
-        from pipeline.narrative_generator import NUMBER_RE, FREQUENCY_RE
         sections = _mock_narrative_response()["sections"]
         # Strip metrics from traction section
         sections[9]["content"] = "Actor: ops\nAction: reviews\nData: signals\nOutput: better"

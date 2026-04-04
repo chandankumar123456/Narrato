@@ -310,7 +310,12 @@ def _fill_empty_fields(section_id: str, content: str) -> str:
 def _fix_key_points(section_id: str, key_points: list[str]) -> list[str]:
     """Ensure key_points list is valid (exactly 3 unique non-empty strings)."""
     # Filter to non-empty strings
-    clean = [kp.strip() for kp in key_points if isinstance(kp, str) and kp.strip()]
+    clean: list[str] = []
+    for kp in key_points:
+        if isinstance(kp, str) and kp.strip():
+            clean.append(kp.strip())
+        else:
+            logger.warning("[narrative_warning] '%s' has non-string or empty key_point — skipping", section_id)
     # Deduplicate while preserving order
     seen: set[str] = set()
     unique: list[str] = []
@@ -343,7 +348,9 @@ def _fix_banned_language(section_id: str, texts: list[str]) -> list[str]:
                 modified = re.sub(pattern, "", modified, flags=re.I).strip()
                 # Clean up double spaces
                 modified = re.sub(r"\s{2,}", " ", modified).strip()
-        fixed.append(modified if modified else text)
+        if not modified:
+            modified = f"(content for {section_id})"
+        fixed.append(modified)
     return fixed
 
 
