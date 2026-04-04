@@ -51,6 +51,9 @@ class PresentationState(BaseModel):
     # Intelligence report (Phase 5 evaluation output)
     intelligence_report: Optional[str] = None
 
+    # Visual rendering engine output
+    visual_render_output: Optional[dict] = None
+
     @field_validator("slide_count", mode="before")
     @classmethod
     def clamp_slide_count(cls, v, info):

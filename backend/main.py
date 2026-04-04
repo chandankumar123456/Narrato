@@ -253,3 +253,30 @@ async def health():
     health_data["celery"] = "connected" if _try_celery() else "unavailable"
 
     return health_data
+
+
+# ── Visual Rendering Engine endpoints ────────────────────────────────
+
+VISUAL_DIR = os.path.join(settings.output_dir, "visual")
+os.makedirs(VISUAL_DIR, exist_ok=True)
+app.mount("/visual", StaticFiles(directory=VISUAL_DIR), name="visual")
+
+
+@app.get("/visual/slides/{job_id}")
+async def get_visual_slides(job_id: str):
+    """Return list of visual HTML/PNG/PDF paths for a completed job."""
+    job = get_job(job_id)
+    if not job or job["status"] != "completed":
+        raise HTTPException(status_code=404, detail="Job not completed")
+
+    # List available visual assets
+    visual_subdir = os.path.join(VISUAL_DIR)
+    html_files = sorted(glob.glob(os.path.join(visual_subdir, "*.html")))
+    png_files = sorted(glob.glob(os.path.join(visual_subdir, "*.png")))
+    pdf_files = sorted(glob.glob(os.path.join(visual_subdir, "*.pdf")))
+
+    return {
+        "html_slides": [f"/visual/{os.path.basename(f)}" for f in html_files],
+        "png_slides": [f"/visual/{os.path.basename(f)}" for f in png_files],
+        "pdf": f"/visual/{os.path.basename(pdf_files[0])}" if pdf_files else None,
+    }

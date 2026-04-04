@@ -16,6 +16,7 @@ from pipeline.content_validator import validate_content
 from pipeline.visual_mapper import generate_visual_queries
 from pipeline.speaker_notes_generator import generate_speaker_notes
 from ppt.generator import generate_ppt
+from pipeline.visual_rendering_pipeline import run_visual_pipeline
 import logging
 import os
 from typing import Callable, Optional
@@ -130,6 +131,17 @@ async def run_pipeline(prompt: str, options: dict = {},
         _write_intelligence_report(state)
     logger.info("[pipeline] Intelligence report generated")
     _report(90)
+
+    # ── Visual Rendering Engine (4-stage) ─────────────────────────
+    logger.info("[pipeline] Running visual rendering pipeline")
+    visual_output = await run_visual_pipeline(state)
+    state = state.model_copy(update={"visual_render_output": visual_output})
+    logger.info(
+        "[pipeline] Visual pipeline: %d HTML slides, %d images",
+        len(visual_output.get("html_slides", [])),
+        len(visual_output.get("image_paths", [])),
+    )
+    _report(93)
 
     output_path = generate_ppt(state)
     state = state.model_copy(update={"output_path": output_path})
