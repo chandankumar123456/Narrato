@@ -388,7 +388,7 @@ async def get_slides(job_id: str):
 
     # Build response with slide content
     slides = []
-    for idx, path in enumerate(html_slides or []):
+    for idx, path in enumerate(html_slides):
         slide_data = {
             "slide_id": idx + 1,
             "html_url": path,

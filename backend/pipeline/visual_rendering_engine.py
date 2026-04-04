@@ -195,14 +195,14 @@ async def run_rendering_engine(
     # Attempt browser rendering (graceful degradation if Playwright missing)
     try:
         image_paths = await render_slides_to_images(safe_slides, output_dir)
-    except Exception:
-        logger.warning("[rendering_engine] fallback: rendering skipped")
+    except Exception as exc:
+        logger.warning("[rendering_engine] fallback: image rendering skipped — %s", exc)
         image_paths = []
 
     try:
         pdf_path = await render_slides_to_pdf(safe_slides, output_dir)
-    except Exception:
-        logger.warning("[rendering_engine] fallback: rendering skipped")
+    except Exception as exc:
+        logger.warning("[rendering_engine] fallback: PDF rendering skipped — %s", exc)
         pdf_path = None
 
     return {
