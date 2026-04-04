@@ -83,7 +83,7 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
                                          progress_callback=_progress,
                                          event_callback=_event))
 
-        # Extract results
+        # Extract results from pipeline (always returns dict)
         if isinstance(result, dict):
             html_slides = result.get("html_slides", [])
             structured_slides = result.get("structured_slides", [])

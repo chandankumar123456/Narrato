@@ -31,6 +31,11 @@ PREVIEW_DIR = os.path.join(settings.output_dir, "previews")
 os.makedirs(PREVIEW_DIR, exist_ok=True)
 app.mount("/previews", StaticFiles(directory=PREVIEW_DIR), name="previews")
 
+# Serve visual rendering output (HTML, PNG, PDF)
+VISUAL_DIR = os.path.join(settings.output_dir, "visual")
+os.makedirs(VISUAL_DIR, exist_ok=True)
+app.mount("/visual", StaticFiles(directory=VISUAL_DIR), name="visual")
+
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -715,10 +720,6 @@ async def delete_slide(job_id: str, slide_id: int):
 
 
 # ── Visual Rendering Engine endpoints ────────────────────────────────
-
-VISUAL_DIR = os.path.join(settings.output_dir, "visual")
-os.makedirs(VISUAL_DIR, exist_ok=True)
-app.mount("/visual", StaticFiles(directory=VISUAL_DIR), name="visual")
 
 
 @app.get("/visual/slides/{job_id}")
