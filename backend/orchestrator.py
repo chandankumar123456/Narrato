@@ -123,4 +123,7 @@ def _write_intelligence_report(state: PresentationState) -> None:
             f.write(state.intelligence_report)
         logger.info("[pipeline] Intelligence report written to %s", report_path)
     except Exception:
-        logger.exception("[pipeline] Failed to write intelligence report")
+        logger.exception(
+            "[pipeline] Failed to write intelligence report — "
+            "pipeline will continue without persisted report"
+        )
