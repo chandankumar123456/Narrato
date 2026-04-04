@@ -1,30 +1,43 @@
+"""Narrato Pipeline Orchestrator — narrative-first, fast execution.
+
+Architecture:
+  1. Parse prompt + schema (2 LLM calls)
+  2. Build state
+  3. Generate FULL narrative in ONE LLM call → split into slides
+  4. Visual pipeline (design + template, deterministic, no LLM)
+  5. Speaker notes (1 LLM call)
+  6. PPT generation (deterministic)
+
+Total LLM calls: ~4 (down from dozens in the old per-slide approach).
+Pipeline stops immediately on failure after max retries.
+"""
+
 from pipeline.prompt_understanding import parse_prompt
 from pipeline.schema_parser import parse_user_schema
 from pipeline.state_builder import build_state
 from pipeline.state_completion import complete_state
-from pipeline.story_generator import generate_story
-from pipeline.slide_planner import plan_slides
-from pipeline.slide_type_assigner import assign_slide_types
-from pipeline.content_structurer import generate_structured_content
-from pipeline.multi_stage_content import generate_multi_stage_content
-from pipeline.slide_evaluator import evaluate_and_improve_slides
-from pipeline.deck_consistency_optimizer import optimize_deck_consistency
-from pipeline.intelligence_report import generate_intelligence_report
+from pipeline.narrative_generator import generate_narrative
 from pipeline.strict_slide_planner import plan_slides_strict
 from pipeline.strict_content_structurer import generate_strict_content
 from pipeline.content_validator import validate_content
 from pipeline.visual_mapper import generate_visual_queries
 from pipeline.speaker_notes_generator import generate_speaker_notes
 from ppt.generator import generate_ppt
-from pipeline.visual_rendering_pipeline import run_visual_pipeline
 from pipeline.visual_design_engine import run_design_engine
 from pipeline.visual_template_engine import run_template_engine
+from pipeline.visual_rendering_engine import run_rendering_engine, build_render_instructions
+from pipeline.visual_export_engine import run_export_engine
 from services.event_system import PipelineEvent, EventType
 import logging
 import os
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class PipelineFailure(Exception):
+    """Raised when a critical pipeline stage fails, stopping the pipeline immediately."""
+    pass
 
 
 def _compute_progress(completed: int, total: int) -> int:
@@ -39,8 +52,11 @@ async def run_pipeline(prompt: str, options: dict = {},
                        event_callback: Optional[Callable[[PipelineEvent], None]] = None) -> str:
     """Run the full Narrato pipeline with event-driven progress reporting.
 
-    The event_callback receives PipelineEvent instances at every meaningful
-    pipeline step. The older progress_callback still works for backward compat.
+    Key changes from old pipeline:
+      - ONE LLM call for full narrative (no slide-by-slide generation)
+      - No evaluator/consistency loops (narrative is coherent by design)
+      - Pipeline stops immediately on failure
+      - Minimal LLM calls for maximum speed
     """
     job_id = options.get("_job_id", "unknown")
 
@@ -65,149 +81,136 @@ async def run_pipeline(prompt: str, options: dict = {},
             except Exception:
                 pass
 
-    logger.info(f"[pipeline] Starting for prompt: {prompt[:80]}")
+    def _fail(stage: str, error: str):
+        """Emit failure event and raise PipelineFailure to stop pipeline."""
+        logger.error("[pipeline] FAILED at stage '%s': %s", stage, error)
+        _emit(EventType.JOB_FAILED, "failed", f"Failed: {error}", 0,
+              data={"error": error, "stage": stage})
+        raise PipelineFailure(f"Pipeline failed at {stage}: {error}")
+
+    logger.info("[pipeline] Starting for prompt: %s", prompt[:80])
     _emit(EventType.STAGE_UPDATE, "init", "Understanding your prompt…", 3)
 
-    # ── Global steps before per-slide work ────────────────────────
-    # Stage 1: Parse prompt signals
-    signals = await parse_prompt(prompt)
-    signals.update({k: v for k, v in options.items() if v is not None and not k.startswith("_")})
+    # ── Stage 1: Parse prompt signals ─────────────────────────────
+    try:
+        signals = await parse_prompt(prompt)
+        signals.update({k: v for k, v in options.items() if v is not None and not k.startswith("_")})
+    except Exception as exc:
+        _fail("prompt_parse", str(exc))
 
     # Stage 1b: Extract strict user schema
-    user_schema = await parse_user_schema(prompt)
+    try:
+        user_schema = await parse_user_schema(prompt)
+    except Exception as exc:
+        logger.warning("[pipeline] Schema parse failed, continuing without: %s", exc)
+        user_schema = {}
+
     _emit(EventType.STAGE_UPDATE, "prompt_parsed", "Analyzing requirements…", 8)
 
-    # Stage 2: Build state
+    # ── Stage 2: Build state ──────────────────────────────────────
     state = build_state(signals, user_schema=user_schema)
     total_slides = state.slide_count
     logger.info(
-        f"[pipeline] State built: {state.topic} | mode={state.generation_mode} | "
-        f"{state.slide_count} slides"
+        "[pipeline] State built: %s | mode=%s | %d slides",
+        state.topic, state.generation_mode, state.slide_count,
     )
     _emit(EventType.STAGE_UPDATE, "state_built", "Planning presentation structure…", 10,
           total_slides=total_slides)
 
-    # ── Progress math ────────────────────────────────────────────
-    # Global steps: parse(1) + schema(1) + state(1) + story(1) + plan(1)
-    #   + evaluator(1) + consistency(1) + visuals(1) + notes(1) + report(1) + ppt(1) = 11
-    # Per-slide steps: content(1) + design(1) + render(1) = 3
-    GLOBAL_STEPS = 11
-    per_slide_steps = 3
+    # ── Progress math (simplified) ────────────────────────────────
+    # Global steps: parse(1) + state(1) + narrative(1) + visuals(1) + notes(1) + ppt(1) = 6
+    # Per-slide: design(1) + render(1) = 2
+    GLOBAL_STEPS = 6
+    per_slide_steps = 2
     total_steps = GLOBAL_STEPS + (total_slides * per_slide_steps)
-    completed_steps = 3  # parse + schema + state
+    completed_steps = 2  # parse + state
 
     if state.generation_mode == "strict":
-        # ── STRICT PIPELINE ─────────────────────────────────────
+        # ── STRICT PIPELINE ──────────────────────────────────────
         logger.info("[pipeline][strict] Using schema-driven pipeline")
 
-        state = plan_slides_strict(state)
+        try:
+            state = plan_slides_strict(state)
+        except Exception as exc:
+            _fail("strict_plan", str(exc))
+
         total_slides = len(state.slide_plan)
         total_steps = GLOBAL_STEPS + (total_slides * per_slide_steps)
         completed_steps += 1
-        logger.info(f"[pipeline][strict] Planned {len(state.slide_plan)} slides")
+        logger.info("[pipeline][strict] Planned %d slides", len(state.slide_plan))
         _emit(EventType.STAGE_UPDATE, "slide_plan", "Slide structure planned…",
               _compute_progress(completed_steps, total_steps),
               total_slides=total_slides)
 
-        # Per-field content generation
-        state = await generate_strict_content(state)
+        try:
+            state = await generate_strict_content(state)
+        except Exception as exc:
+            _fail("strict_content", str(exc))
+
         completed_steps += 1
         _emit(EventType.STAGE_UPDATE, "content_done", "Content generation complete…",
               _compute_progress(completed_steps, total_steps),
               total_slides=total_slides)
 
-        state = validate_content(state)
+        try:
+            state = validate_content(state)
+        except Exception as exc:
+            logger.warning("[pipeline][strict] Validation failed, continuing: %s", exc)
+
         completed_steps += 1
-        logger.info(
-            "[pipeline][strict] Validation: %s",
-            (state.metadata or {}).get("validation_status", "unknown"),
-        )
         _emit(EventType.STAGE_UPDATE, "validated", "Content validated…",
               _compute_progress(completed_steps, total_steps),
               total_slides=total_slides)
 
     else:
-        # ── DEFAULT PIPELINE ────────────────────────────────────
-        state = await complete_state(state)
+        # ── DEFAULT PIPELINE: Narrative-first ─────────────────────
+        # Optional: complete state (fills in missing fields)
+        try:
+            state = await complete_state(state)
+        except Exception as exc:
+            logger.warning("[pipeline] State completion failed, continuing: %s", exc)
+
         completed_steps += 1
         _emit(EventType.STAGE_UPDATE, "state_complete", "Building narrative arc…",
               _compute_progress(completed_steps, total_steps))
 
-        state = await generate_story(state)
-        completed_steps += 1
-        logger.info(f"[pipeline] Story: {state.story.get('key_message')}")
-        _emit(EventType.STAGE_UPDATE, "story", "Story framework created…",
-              _compute_progress(completed_steps, total_steps))
+        # CRITICAL: Generate FULL narrative in ONE LLM call
+        try:
+            state = await generate_narrative(state)
+        except Exception as exc:
+            _fail("narrative_generation", str(exc))
 
-        state = plan_slides(state)
-        state = assign_slide_types(state)
-        total_slides = len(state.slide_plan)
+        total_slides = len(state.structured_slides or [])
         total_steps = GLOBAL_STEPS + (total_slides * per_slide_steps)
         completed_steps += 1
-        logger.info(f"[pipeline] Planned {len(state.slide_plan)} slides")
-        _emit(EventType.STAGE_UPDATE, "slide_plan",
-              f"Planning {total_slides} slides…",
-              _compute_progress(completed_steps, total_steps),
-              total_slides=total_slides)
-
-        # Multi-stage content generation
-        state = await generate_multi_stage_content(state)
-        completed_steps += 1
-        logger.info("[pipeline] Multi-stage content generation complete")
-        _emit(EventType.STAGE_UPDATE, "content_done", "Slide content generated…",
-              _compute_progress(completed_steps, total_steps),
-              total_slides=total_slides)
-
-        # Evaluator
-        state = await evaluate_and_improve_slides(state)
-        evals = (state.metadata or {}).get("slide_evaluations", [])
-        avg_score = (
-            round(sum(e.get("overall_score", 0) for e in evals) / len(evals), 1)
-            if len(evals) > 0 else 0
-        )
-        completed_steps += 1
-        logger.info(
-            "[pipeline] Slide evaluation complete: %d slides, avg score %.1f/5",
-            len(evals), avg_score,
-        )
-        _emit(EventType.STAGE_UPDATE, "evaluated", "Slides evaluated and improved…",
-              _compute_progress(completed_steps, total_steps),
-              total_slides=total_slides)
-
-        # Deck consistency
-        state = await optimize_deck_consistency(state)
-        consistency = (state.metadata or {}).get("deck_consistency", {})
-        completed_steps += 1
-        logger.info(
-            "[pipeline] Deck consistency pass: %d slides rewritten",
-            consistency.get("slides_rewritten", 0),
-        )
-        _emit(EventType.STAGE_UPDATE, "consistency", "Deck consistency optimized…",
+        logger.info("[pipeline] Narrative generated: %d slides", total_slides)
+        _emit(EventType.STAGE_UPDATE, "narrative_done",
+              f"Narrative generated — {total_slides} slides",
               _compute_progress(completed_steps, total_steps),
               total_slides=total_slides)
 
     # ── Shared tail (both paths) ──────────────────────────────────
-    state = await generate_visual_queries(state)
+    # Visual queries (image fetching)
+    try:
+        state = await generate_visual_queries(state)
+    except Exception as exc:
+        logger.warning("[pipeline] Visual queries failed, continuing: %s", exc)
+
     completed_steps += 1
-    logger.info(f"[pipeline] Content + images ready")
     _emit(EventType.STAGE_UPDATE, "visual_queries", "Preparing visual elements…",
           _compute_progress(completed_steps, total_steps),
           total_slides=total_slides)
 
-    state = await generate_speaker_notes(state)
-    completed_steps += 1
-    logger.info(f"[pipeline] Speaker notes generated for {len(state.speaker_notes or [])} slides")
-    _emit(EventType.STAGE_UPDATE, "speaker_notes", "Speaker notes written…",
-          _compute_progress(completed_steps, total_steps),
-          total_slides=total_slides)
+    # Speaker notes (1 LLM call for ALL slides)
+    try:
+        state = await generate_speaker_notes(state)
+    except Exception as exc:
+        logger.warning("[pipeline] Speaker notes failed, continuing: %s", exc)
 
-    # Intelligence report
-    state = await generate_intelligence_report(state)
-    if state.intelligence_report:
-        _write_intelligence_report(state)
     completed_steps += 1
-    logger.info("[pipeline] Intelligence report generated")
-    _emit(EventType.STAGE_UPDATE, "report", "Intelligence report generated…",
+    logger.info("[pipeline] Speaker notes generated for %d slides",
+                len(state.speaker_notes or []))
+    _emit(EventType.STAGE_UPDATE, "speaker_notes", "Speaker notes written…",
           _compute_progress(completed_steps, total_steps),
           total_slides=total_slides)
 
@@ -224,7 +227,7 @@ async def run_pipeline(prompt: str, options: dict = {},
     for idx, slide in enumerate(slides):
         slide_num = idx + 1
 
-        # Design this slide
+        # Design this slide (deterministic, no LLM)
         designs = run_design_engine([slide], state_theme=theme)
         completed_steps += 1
         _emit(EventType.SLIDE_DESIGNED, "design",
@@ -232,7 +235,7 @@ async def run_pipeline(prompt: str, options: dict = {},
               _compute_progress(completed_steps, total_steps),
               slide_id=slide_num, total_slides=total_slides)
 
-        # Render HTML for this slide
+        # Render HTML for this slide (deterministic, no LLM)
         html_list = run_template_engine(designs)
         html_content = html_list[0] if html_list else ""
         all_html_slides.append(html_content)
@@ -243,26 +246,26 @@ async def run_pipeline(prompt: str, options: dict = {},
               slide_id=slide_num, total_slides=total_slides,
               data={"html": html_content})
 
-    # ── Full visual pipeline for export artifacts (PNG/PDF) ───────
-    logger.info("[pipeline] Running visual rendering pipeline for export")
-    visual_output = await run_visual_pipeline(state)
+    # ── Visual export (PNG/PDF) — skip Playwright if missing ──────
+    logger.info("[pipeline] Running visual export pipeline")
+    output_dir = _resolve_output_dir()
+    visual_output = await _run_visual_export_safe(all_html_slides, output_dir)
     state = state.model_copy(update={"visual_render_output": visual_output})
-    logger.info(
-        "[pipeline] Visual pipeline: %d HTML slides, %d images",
-        len(visual_output.get("html_slides", [])),
-        len(visual_output.get("image_paths", [])),
-    )
 
     # PPT generation
-    output_path = generate_ppt(state)
+    try:
+        output_path = generate_ppt(state)
+    except Exception as exc:
+        _fail("ppt_generation", str(exc))
+
     state = state.model_copy(update={"output_path": output_path})
     completed_steps += 1
-    logger.info(f"[pipeline] PPT generated: {output_path}")
+    logger.info("[pipeline] PPT generated: %s", output_path)
     _emit(EventType.STAGE_UPDATE, "ppt", "PowerPoint generated…",
           _compute_progress(completed_steps, total_steps),
           total_slides=total_slides)
 
-    # ── Emit completion ────────────────────────────────────────────
+    # ── Emit completion ───────────────────────────────────────────
     _emit(EventType.JOB_COMPLETED, "completed", "Presentation ready!",
           100, total_slides=total_slides)
 
@@ -271,6 +274,66 @@ async def run_pipeline(prompt: str, options: dict = {},
         "html_slides": all_html_slides if all_html_slides else visual_output.get("html_slides", []),
         "structured_slides": [s for s in (state.structured_slides or [])],
     }
+
+
+async def _run_visual_export_safe(html_slides: list[str], output_dir: str) -> dict:
+    """Run visual export with safe Playwright handling.
+
+    If Playwright is NOT installed:
+      - SKIP rendering completely
+      - Do NOT call subprocess
+      - Do NOT attempt rendering
+      - Return HTML-only output
+    """
+    try:
+        from playwright.async_api import async_playwright  # noqa: F401
+        has_playwright = True
+    except ImportError:
+        has_playwright = False
+        logger.info("[pipeline] Playwright not installed — skipping browser rendering")
+
+    render_instructions = build_render_instructions(len(html_slides))
+
+    if has_playwright:
+        try:
+            render_result = await run_rendering_engine(html_slides, output_dir)
+        except Exception as exc:
+            logger.warning("[pipeline] Rendering engine failed: %s — continuing without images", exc)
+            render_result = {"render_instructions": render_instructions, "image_paths": [], "pdf_path": None}
+    else:
+        # No Playwright: skip ALL rendering, no subprocess calls
+        render_result = {"render_instructions": render_instructions, "image_paths": [], "pdf_path": None}
+
+    try:
+        export_result = run_export_engine(
+            html_slides=html_slides,
+            image_paths=render_result.get("image_paths", []),
+            pdf_path=render_result.get("pdf_path"),
+            output_dir=output_dir,
+        )
+    except Exception as exc:
+        logger.warning("[pipeline] Export engine failed: %s", exc)
+        export_result = {"html_paths": [], "image_paths": [], "pdf_path": None,
+                         "ppt_path": None, "ppt_structure": {"slides": []}}
+
+    return {
+        "designs": [],
+        "html_slides": html_slides,
+        "render_instructions": render_instructions,
+        "html_paths": export_result.get("html_paths", []),
+        "image_paths": export_result.get("image_paths", []),
+        "pdf_path": export_result.get("pdf_path"),
+        "ppt_path": export_result.get("ppt_path"),
+        "ppt_structure": export_result.get("ppt_structure", {"slides": []}),
+    }
+
+
+def _resolve_output_dir() -> str:
+    """Determine the output directory for visual assets."""
+    base = os.environ.get("NARRATO_OUTPUT_DIR", "./outputs")
+    visual_dir = os.path.join(base, "visual")
+    os.makedirs(visual_dir, exist_ok=True)
+    return visual_dir
 
 
 def _write_intelligence_report(state) -> None:

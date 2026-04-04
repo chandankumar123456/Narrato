@@ -307,6 +307,14 @@ async def health():
 # ── Server-Sent Events (SSE) streaming endpoint ───────────────────
 
 
+def _make_terminal_sse(event_type: str, stage: str, progress: int, label: str, error: str = "") -> str:
+    """Build a terminal SSE data line for completed/failed events."""
+    payload = {"type": event_type, "stage": stage, "progress": progress, "label": label}
+    if error:
+        payload["data"] = {"error": error}
+    return f"data: {json.dumps(payload)}\n\n"
+
+
 @app.get("/stream/{job_id}")
 async def stream_events(job_id: str, request: Request):
     """Stream pipeline events via SSE.
@@ -321,12 +329,19 @@ async def stream_events(job_id: str, request: Request):
 
     async def event_generator():
         cursor = 0
+        max_idle_iterations = 600  # 5 minutes at 0.5s per iteration
+        idle_count = 0
         while True:
             # Check if client disconnected
             if await request.is_disconnected():
                 break
 
             new_events = get_events(job_id, after=cursor)
+            if new_events:
+                idle_count = 0  # Reset idle counter on new events
+            else:
+                idle_count += 1
+
             for evt in new_events:
                 yield f"data: {json.dumps(evt)}\n\n"
                 cursor += 1
@@ -343,12 +358,17 @@ async def stream_events(job_id: str, request: Request):
                        for e in new_events):
                     return
                 # If no terminal event in log yet but job is done, synthesize one
-                if cursor > 0:
-                    if current_job["status"] == "completed":
-                        yield f"data: {json.dumps({'type': EventType.JOB_COMPLETED, 'stage': 'completed', 'progress': 100, 'label': 'Presentation ready!'})}\n\n"
-                    else:
-                        yield f"data: {json.dumps({'type': EventType.JOB_FAILED, 'stage': 'failed', 'progress': 0, 'label': 'Generation failed', 'data': {'error': current_job.get('error', '')}})}\n\n"
-                    return
+                if current_job["status"] == "completed":
+                    yield _make_terminal_sse(EventType.JOB_COMPLETED, "completed", 100, "Presentation ready!")
+                else:
+                    yield _make_terminal_sse(EventType.JOB_FAILED, "failed", 0, "Generation failed", current_job.get("error", ""))
+                return
+
+            # Prevent infinite polling — terminate after max idle time
+            if idle_count >= max_idle_iterations:
+                logger.warning("[stream] Terminating SSE stream for job %s after %d idle iterations", job_id, idle_count)
+                yield _make_terminal_sse(EventType.JOB_FAILED, "timeout", 0, "Stream timed out")
+                return
 
             await asyncio.sleep(0.5)
 

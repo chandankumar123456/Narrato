@@ -27,6 +27,9 @@ async def run_visual_pipeline(state) -> dict:
     """
     Execute the full 4-stage visual rendering pipeline.
 
+    If Playwright is NOT installed, Stage 3 (rendering) is SKIPPED entirely —
+    no subprocess is called, no rendering is attempted.
+
     Args:
         state: PresentationState with structured_slides populated.
 
@@ -59,9 +62,18 @@ async def run_visual_pipeline(state) -> dict:
     logger.info("[visual_pipeline] Stage 2: Template Engine")
     html_slides = run_template_engine(designs)
 
-    # ── Stage 3: Rendering Engine ───────────────────────────────
-    logger.info("[visual_pipeline] Stage 3: Rendering Engine")
-    render_result = await run_rendering_engine(html_slides, output_dir)
+    # ── Stage 3: Rendering Engine (SKIP if Playwright missing) ──
+    has_playwright = _check_playwright()
+    if has_playwright:
+        logger.info("[visual_pipeline] Stage 3: Rendering Engine")
+        try:
+            render_result = await run_rendering_engine(html_slides, output_dir)
+        except Exception as exc:
+            logger.warning("[visual_pipeline] Rendering failed: %s — continuing without images", exc)
+            render_result = _empty_render_result(len(html_slides))
+    else:
+        logger.info("[visual_pipeline] Stage 3: SKIPPED (Playwright not installed)")
+        render_result = _empty_render_result(len(html_slides))
 
     # ── Stage 4: Export Engine ──────────────────────────────────
     logger.info("[visual_pipeline] Stage 4: Export Engine")
@@ -94,6 +106,25 @@ async def run_visual_pipeline(state) -> dict:
     )
 
     return result
+
+
+def _check_playwright() -> bool:
+    """Check if Playwright is importable without calling any subprocess."""
+    try:
+        from playwright.async_api import async_playwright  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _empty_render_result(slide_count: int) -> dict:
+    """Return an empty render result when rendering is skipped."""
+    from pipeline.visual_rendering_engine import build_render_instructions
+    return {
+        "render_instructions": build_render_instructions(slide_count),
+        "image_paths": [],
+        "pdf_path": None,
+    }
 
 
 def _resolve_output_dir(state) -> str:
