@@ -143,7 +143,10 @@ export default function EditModal({
       const copy = JSON.parse(JSON.stringify(prev));
       let obj = copy;
       for (let i = 0; i < keys.length - 1; i++) {
-        if (!Object.hasOwn(obj, keys[i]) || typeof obj[keys[i]] !== "object") {
+        if (
+          !Object.prototype.hasOwnProperty.call(obj, keys[i]) ||
+          typeof obj[keys[i]] !== "object"
+        ) {
           obj[keys[i]] = {};
         }
         obj = obj[keys[i]];

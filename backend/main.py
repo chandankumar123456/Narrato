@@ -295,9 +295,9 @@ def _safe_job_dir(job_id: str) -> tuple[str, str]:
     try:
         common = os.path.commonpath([job_dir, real_output])
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid job_id")
+        raise HTTPException(status_code=400, detail="Invalid job_id: path traversal rejected")
     if common != real_output:
-        raise HTTPException(status_code=400, detail="Invalid job_id")
+        raise HTTPException(status_code=400, detail="Invalid job_id: path traversal rejected")
     return job_dir, safe_id
 
 
