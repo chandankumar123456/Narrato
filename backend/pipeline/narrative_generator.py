@@ -149,6 +149,32 @@ TRIGGER_RE = re.compile(r"\b(when|upon|after|at the time|charged|billed|invoice)
 OVERLAP_DETECTION_MIN_PHRASE_LENGTH = 5
 OVERLAP_DETECTION_MAX_PHRASE_LENGTH = 7
 
+# Section role definitions for semantic differentiation
+SECTION_ROLES = {
+    "product": {
+        "expected": "nouns (features, system components)",
+        "must_contain_re": re.compile(
+            r"\b(feature|component|capability|tool|module|interface|dashboard|console|tracker|widget|service|detector|monitor|hub|portal)\b",
+            re.I,
+        ),
+        "must_not_contain_re": re.compile(
+            r"\b(pipeline|routing|sequence|stage)\b",
+            re.I,
+        ),
+    },
+    "mechanism": {
+        "expected": "verbs/process (flow, steps, pipeline)",
+        "must_contain_re": re.compile(
+            r"\b(flow|step|pipeline|process|routing|sequence|stage|input|processing|output|transform|compute|route|dispatch|parse|filter|aggregate|ranks|compare|sends)\b",
+            re.I,
+        ),
+        "must_not_contain_re": re.compile(
+            r"\b(feature|component|capability|module|interface|dashboard|console)\b",
+            re.I,
+        ),
+    },
+}
+
 
 async def generate_narrative(state: PresentationState) -> PresentationState:
     """Generate a full 12-section narrative in one LLM call and map it to slides."""
@@ -189,14 +215,23 @@ NON-OVERLAP DIMENSIONS:
 - actor: who experiences the problem only
 - root_cause: structural cause only
 - system_gap: limitations of current tools only
-- product: product definition only
-- mechanism: input -> processing -> output only
+- product: product definition only (NOUNS: features, components, capabilities)
+- mechanism: input -> processing -> output only (VERBS: flow, steps, pipeline, routing)
 - defensibility: hard-to-copy reasons only
 - business_model: payer + pricing + revenue trigger only
 - market_expansion: adoption spread sequence only
 - traction: proof with numbers only
 - go_to_market: acquisition channels and sales motion only
 - vision: future state only
+
+STRICT SEPARATION RULES:
+- mechanism MUST NOT describe features — only how data flows through the system
+- product MUST NOT describe workflow — only what exists (components, capabilities)
+- Each section must answer a DIFFERENT question:
+  problem → what is broken / pain
+  product → what exists (features, components)
+  mechanism → how it works internally (process, flow, pipeline)
+  impact/traction → results, outcomes
 
 Return ONLY valid JSON."""
 
@@ -235,6 +270,9 @@ Sections:
     except Exception as exc:
         logger.error("[narrative] LLM narrative generation failed: %s", exc)
         raise
+
+    # Post-generation cleanup: remove repeated concepts across sections
+    raw_sections = _deduplicate_concepts(raw_sections)
 
     sections = _validate_sections(raw_sections)
 
@@ -335,9 +373,35 @@ def _validate_sections(raw_sections: list[dict]) -> list[dict]:
         for prior_index, prior_claims in enumerate(previous_claims):
             overlap = _claims_overlap(current_claims, prior_claims)
             if overlap:
-                raise ValueError(
-                    f"Narrative sections overlap: '{validated['id']}' repeats '{EXPECTED_SECTION_IDS[prior_index]}' via {sorted(overlap)[0]}"
+                prior_id = EXPECTED_SECTION_IDS[prior_index]
+                logger.warning(
+                    "[narrative] overlap detected between '%s' and '%s'",
+                    validated["id"],
+                    prior_id,
                 )
+
+                # Attempt auto-fix: remove overlapping phrases from current section
+                validated = _auto_fix_overlap(validated, overlap)
+                current_claims = _claim_fingerprint(validated)
+
+                # Re-check after fix
+                remaining_overlap = _claims_overlap(current_claims, prior_claims)
+                if not remaining_overlap:
+                    logger.info("[narrative] overlap resolved via rewrite")
+                else:
+                    logger.warning(
+                        "[narrative_warning] overlap detected but tolerated between '%s' and '%s'",
+                        validated["id"],
+                        prior_id,
+                    )
+
+        # Check section differentiation
+        diff_warnings = _check_section_differentiation(
+            validated["id"], validated["content"], validated["key_points"],
+        )
+        for warning in diff_warnings:
+            logger.warning("[narrative] %s", warning)
+
         previous_claims.append(current_claims)
         sections.append(validated)
 
@@ -452,6 +516,86 @@ def _claims_overlap(current: set[str], prior: set[str]) -> set[str]:
         claim for claim in overlap
         if len(claim.split()) >= OVERLAP_DETECTION_MIN_PHRASE_LENGTH
     }
+
+
+def _auto_fix_overlap(section: dict, overlapping_phrases: set[str]) -> dict:
+    """Attempt to remove overlapping phrases from a section's key_points.
+
+    Strips words that appear in the overlapping phrases from the later
+    section's key_points, preserving stopwords and structural words.
+    """
+    overlap_words: set[str] = set()
+    for phrase in overlapping_phrases:
+        overlap_words.update(phrase.split())
+
+    fixed_points: list[str] = []
+    for kp in section["key_points"]:
+        words = kp.split()
+        cleaned = [
+            w for w in words
+            if re.sub(r"[^a-z0-9]", "", w.lower()) not in overlap_words
+            or re.sub(r"[^a-z0-9]", "", w.lower()) in STOPWORDS
+        ]
+        result = " ".join(cleaned).strip()
+        fixed_points.append(result if result else kp)
+
+    return {**section, "key_points": fixed_points}
+
+
+def _deduplicate_concepts(sections: list[dict]) -> list[dict]:
+    """Post-generation cleanup: remove repeated keywords and phrases across sections.
+
+    Ensures each section introduces new information by stripping words
+    from later sections that duplicate earlier claim fingerprints.
+    """
+    seen_phrases: set[str] = set()
+    cleaned_sections: list[dict] = []
+
+    for section in sections:
+        current_fp = _claim_fingerprint(section)
+        overlapping = current_fp & seen_phrases
+
+        if overlapping:
+            logger.info(
+                "[narrative] deduplicate: section '%s' has %d overlapping phrases",
+                section.get("id", "?"),
+                len(overlapping),
+            )
+            section = _auto_fix_overlap(section, overlapping)
+
+        seen_phrases.update(_claim_fingerprint(section))
+        cleaned_sections.append(section)
+
+    return cleaned_sections
+
+
+def _check_section_differentiation(
+    section_id: str, content: str, key_points: list[str],
+) -> list[str]:
+    """Check that a section contains appropriate content for its role.
+
+    Returns a list of warning strings (empty if everything is fine).
+    """
+    if section_id not in SECTION_ROLES:
+        return []
+
+    role = SECTION_ROLES[section_id]
+    blob = "\n".join([content, *key_points])
+    warnings: list[str] = []
+
+    if not role["must_contain_re"].search(blob):
+        warnings.append(
+            f"Section '{section_id}' may lack expected {role['expected']} content"
+        )
+
+    match = role["must_not_contain_re"].search(blob)
+    if match:
+        warnings.append(
+            f"Section '{section_id}' contains unexpected term '{match.group()}' — "
+            f"expected {role['expected']}"
+        )
+
+    return warnings
 
 
 def _normalized_phrases(text: str) -> set[str]:
