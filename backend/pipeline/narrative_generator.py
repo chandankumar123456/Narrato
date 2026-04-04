@@ -144,6 +144,8 @@ IMPROVEMENT_RE = re.compile(
 )
 PRICING_RE = re.compile(r"\b(per\s+(unit|site|seat|location|shipment|account)|subscription|annual|monthly|usage-based|contract)\b", re.I)
 TRIGGER_RE = re.compile(r"\b(when|upon|after|at the time|charged|billed|invoice)\b", re.I)
+OVERLAP_DETECTION_MIN_PHRASE_LENGTH = 5
+OVERLAP_DETECTION_MAX_PHRASE_LENGTH = 7
 
 
 async def generate_narrative(state: PresentationState) -> PresentationState:
@@ -442,13 +444,19 @@ def _claim_fingerprint(section: dict) -> set[str]:
 
 def _claims_overlap(current: set[str], prior: set[str]) -> set[str]:
     overlap = current & prior
-    return {claim for claim in overlap if len(claim.split()) >= 4}
+    return {
+        claim for claim in overlap
+        if len(claim.split()) >= OVERLAP_DETECTION_MIN_PHRASE_LENGTH
+    }
 
 
 def _normalized_phrases(text: str) -> set[str]:
     tokens = [token for token in re.findall(r"[a-z0-9]+", text) if token not in STOPWORDS]
     phrases = set()
-    for size in (5, 6, 7):
+    for size in range(
+        OVERLAP_DETECTION_MIN_PHRASE_LENGTH,
+        OVERLAP_DETECTION_MAX_PHRASE_LENGTH + 1,
+    ):
         for index in range(len(tokens) - size + 1):
             phrases.add(" ".join(tokens[index:index + size]))
     return phrases

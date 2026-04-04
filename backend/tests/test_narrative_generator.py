@@ -241,8 +241,9 @@ class TestValidationHelpers:
             _validate_sections(bad)
 
     def test_claim_overlap_helper(self):
-        a = _claim_fingerprint({"content": "Actor: one\nAction: two\nData: three\nOutput: four", "key_points": ["alpha beta gamma delta epsilon", "x", "y"]})
-        b = _claim_fingerprint({"content": "Actor: five\nAction: six\nData: seven\nOutput: eight", "key_points": ["alpha beta gamma delta epsilon", "m", "n"]})
+        duplicated_claim = "alpha beta gamma delta epsilon"
+        a = _claim_fingerprint({"content": "Actor: one\nAction: two\nData: three\nOutput: four", "key_points": [duplicated_claim, "x", "y"]})
+        b = _claim_fingerprint({"content": "Actor: five\nAction: six\nData: seven\nOutput: eight", "key_points": [duplicated_claim, "m", "n"]})
         assert _claims_overlap(a, b)
 
 
