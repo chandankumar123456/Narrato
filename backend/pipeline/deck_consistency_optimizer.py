@@ -23,6 +23,7 @@ from typing import Optional
 
 from models.presentation_state import PresentationState
 from services.llm_client import call_llm_json
+from pipeline.slide_utils import flatten_content, extract_bullets, find_plan_entry
 
 logger = logging.getLogger(__name__)
 
@@ -395,49 +396,12 @@ def _build_deck_text(slides: list[dict]) -> str:
 
 def _flatten_content(content: dict) -> str:
     """Flatten a slide content dict into a human-readable string."""
-    parts: list[str] = []
-    for key, val in content.items():
-        if isinstance(val, str):
-            parts.append(f"{key}: {val}")
-        elif isinstance(val, list):
-            for item in val:
-                if isinstance(item, str):
-                    parts.append(f"- {item}")
-                elif isinstance(item, dict):
-                    parts.append(
-                        "- " + ", ".join(f"{k}: {v}" for k, v in item.items())
-                    )
-        elif isinstance(val, dict):
-            parts.append(
-                f"{key}: " + ", ".join(f"{k}: {v}" for k, v in val.items())
-            )
-    return "\n".join(parts)
+    return flatten_content(content)
 
 
 def _extract_bullets(content: dict) -> list[str]:
     """Extract descriptive text items from slide content for structural checks."""
-    bullets: list[str] = []
-    for key, val in content.items():
-        if key in ("title", "section_title", "presenter", "contact", "attribution",
-                    "icon", "stat", "stat_label", "source", "year", "cta_text",
-                    "label", "left_label", "right_label"):
-            continue
-        if isinstance(val, str) and key in ("body", "subtitle", "description",
-                                             "tagline", "context", "result",
-                                             "takeaway", "key_takeaway", "message",
-                                             "quote", "caption"):
-            if val.strip():
-                bullets.append(val)
-        elif isinstance(val, list):
-            for item in val:
-                if isinstance(item, str):
-                    if item.strip():
-                        bullets.append(item)
-                elif isinstance(item, dict):
-                    desc = item.get("description", "")
-                    if desc and desc.strip():
-                        bullets.append(desc)
-    return bullets
+    return extract_bullets(content)
 
 
 def _collect_issues_for_slide(
@@ -476,8 +440,4 @@ def _collect_issues_for_slide(
 
 def _find_plan_entry(state: PresentationState, slide_id: int) -> dict:
     """Find the slide plan entry matching a slide_id."""
-    if state.slide_plan:
-        for entry in state.slide_plan:
-            if entry.get("slide_id") == slide_id:
-                return entry
-    return {"section": "unknown", "purpose": "unknown", "type": "unknown", "slide_id": slide_id}
+    return find_plan_entry(state, slide_id)
