@@ -1,9 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
 
 @dataclass
 class ThemeConfig:
     name: str
-    primary: str        # hex
+    primary: str        # hex colour (no leading '#')
     secondary: str
     background: str
     text: str
@@ -12,6 +13,13 @@ class ThemeConfig:
     font_body: str
     heading_size: int
     body_size: int
+    # Surface colour used for card backgrounds (defaults to background)
+    surface: str = ""
+
+    def __post_init__(self):
+        if not self.surface:
+            self.surface = self.background
+
 
 MODERN = ThemeConfig(
     name="modern",
@@ -22,8 +30,9 @@ MODERN = ThemeConfig(
     accent="FD79A8",
     font_heading="Calibri",
     font_body="Calibri",
-    heading_size=36,
-    body_size=18,
+    heading_size=44,
+    body_size=20,
+    surface="F8F8FF",
 )
 
 CORPORATE = ThemeConfig(
@@ -35,8 +44,9 @@ CORPORATE = ThemeConfig(
     accent="E8A020",
     font_heading="Calibri",
     font_body="Calibri",
-    heading_size=34,
-    body_size=18,
+    heading_size=44,
+    body_size=20,
+    surface="FFFFFF",
 )
 
 MINIMAL = ThemeConfig(
@@ -48,8 +58,9 @@ MINIMAL = ThemeConfig(
     accent="000000",
     font_heading="Calibri",
     font_body="Calibri",
-    heading_size=36,
-    body_size=18,
+    heading_size=44,
+    body_size=20,
+    surface="FFFFFF",
 )
 
 THEMES = {"modern": MODERN, "corporate": CORPORATE, "minimal": MINIMAL}

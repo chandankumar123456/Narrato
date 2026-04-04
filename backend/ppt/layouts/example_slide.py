@@ -1,76 +1,65 @@
-from pptx.util import Inches, Pt  # type: ignore
+"""Example / case study slide — TWO-COLUMN (Context | Result) + highlight."""
+
+from pptx.util import Inches  # type: ignore
 from pptx.enum.text import PP_ALIGN  # type: ignore
-from ppt.generator import add_text_box, hex_to_rgb, set_background
+
+from ppt.generator import add_text_box
+from ppt.components import (
+    heading_block, accent_underline, subheading_text, body_text,
+    highlight_box,
+)
+from ppt.design_system import (
+    ContentTransform, Grid, Spacing, Typography, VLayout, VStack,
+)
 
 
 def render(slide, content: dict, theme, image_path=None):
-    # Title
-    add_text_box(
-        slide, content.get("title", "Case Study"),
-        Inches(0.8), Inches(0.4), Inches(11.73), Inches(0.9),
-        theme.font_heading, theme.heading_size, bold=True,
-        color=theme.primary, align=PP_ALIGN.LEFT,
+    # PRIMARY: Title heading
+    heading_block(slide, content.get("title", "Case Study"), theme)
+
+    # Decorative: accent underline
+    accent_underline(slide, theme)
+
+    # SECONDARY: Example subtitle
+    subheading_text(
+        slide, content.get("example_title", ""), theme,
+        y=VLayout.ACCENT_Y + Spacing.MD,
+        color=theme.secondary,
     )
 
-    # Accent underline
-    bar = slide.shapes.add_shape(1, Inches(0.8), Inches(1.25), Inches(1.5), Inches(0.06))
-    bar.fill.solid()
-    bar.fill.fore_color.rgb = hex_to_rgb(theme.accent)
-    bar.line.fill.background()
+    # SECONDARY: Two-column Context / Result via Grid.split(6, 6)
+    cols = Grid.split(6, 6)
+    section_y = VLayout.CONTENT_START + Spacing.LG
 
-    # Example title
-    add_text_box(
-        slide, content.get("example_title", ""),
-        Inches(0.8), Inches(1.7), Inches(11.73), Inches(0.7),
-        theme.font_heading, 24, bold=True,
-        color=theme.secondary, align=PP_ALIGN.LEFT,
-    )
+    for i, (label, key) in enumerate([("Context", "context"), ("Result", "result")]):
+        col_left, col_w = cols[i]
 
-    # Context section
-    add_text_box(
-        slide, "Context",
-        Inches(0.8), Inches(2.6), Inches(5.5), Inches(0.5),
-        theme.font_heading, 16, bold=True,
-        color=theme.accent, align=PP_ALIGN.LEFT,
-    )
-    add_text_box(
-        slide, content.get("context", ""),
-        Inches(0.8), Inches(3.1), Inches(5.5), Inches(1.5),
-        theme.font_body, 15, bold=False,
-        color=theme.text, align=PP_ALIGN.LEFT,
-    )
+        # Section label (TERTIARY)
+        add_text_box(
+            slide, label,
+            Inches(col_left + Spacing.SM), Inches(section_y),
+            Inches(col_w - Spacing.SM), Inches(0.5),
+            theme.font_heading, Typography.CAPTION + 2, bold=True,
+            color=theme.accent, align=PP_ALIGN.LEFT,
+        )
 
-    # Result section
-    add_text_box(
-        slide, "Result",
-        Inches(7.0), Inches(2.6), Inches(5.5), Inches(0.5),
-        theme.font_heading, 16, bold=True,
-        color=theme.accent, align=PP_ALIGN.LEFT,
-    )
-    add_text_box(
-        slide, content.get("result", ""),
-        Inches(7.0), Inches(3.1), Inches(5.5), Inches(1.5),
-        theme.font_body, 15, bold=False,
-        color=theme.text, align=PP_ALIGN.LEFT,
-    )
+        # Section body
+        raw = content.get(key, "")
+        display = ContentTransform.truncate(raw, max_words=30)
+        body_text(
+            slide, display, theme,
+            left=col_left + Spacing.SM,
+            y=section_y + 0.5 + Spacing.SM,
+            width=col_w - Spacing.SM,
+            height=1.5,
+            size=Typography.BODY, color=theme.text,
+        )
 
-    # Takeaway box
-    takeaway_bg = slide.shapes.add_shape(
-        1, Inches(0.8), Inches(5.2), Inches(11.73), Inches(1.5),
-    )
-    takeaway_bg.fill.solid()
-    takeaway_bg.fill.fore_color.rgb = hex_to_rgb(theme.primary)
-    takeaway_bg.line.fill.background()
-
-    add_text_box(
-        slide, "Key Takeaway",
-        Inches(1.2), Inches(5.3), Inches(10.93), Inches(0.5),
-        theme.font_heading, 14, bold=True,
-        color=theme.background, align=PP_ALIGN.LEFT,
-    )
-    add_text_box(
-        slide, content.get("takeaway", ""),
-        Inches(1.2), Inches(5.8), Inches(10.93), Inches(0.8),
-        theme.font_body, 16, bold=False,
-        color=theme.background, align=PP_ALIGN.LEFT,
+    # SECONDARY: Key takeaway highlight box
+    highlight_box(
+        slide, theme,
+        label="Key Takeaway",
+        text=content.get("takeaway", ""),
+        y=VLayout.CONTENT_END - 1.3,
+        height=1.3,
     )

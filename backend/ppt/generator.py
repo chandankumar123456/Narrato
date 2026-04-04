@@ -78,7 +78,7 @@ def _render_slide(slide, slide_data: dict, theme: ThemeConfig):
         title_slide, section_header, agenda_slide, problem_slide,
         stats_slide, feature_slide, comparison_slide, timeline_slide,
         example_slide, quote_slide, image_slide, conclusion_slide,
-        cta_slide, thank_you_slide,
+        cta_slide, thank_you_slide, example_detail_slide,
     )
 
     dispatch = {
@@ -91,6 +91,7 @@ def _render_slide(slide, slide_data: dict, theme: ThemeConfig):
         "comparison_slide": comparison_slide.render,
         "timeline_slide": timeline_slide.render,
         "example_slide": example_slide.render,
+        "example_detail_slide": example_detail_slide.render,
         "quote_slide": quote_slide.render,
         "image_slide": image_slide.render,
         "conclusion_slide": conclusion_slide.render,
@@ -110,11 +111,17 @@ def _render_slide(slide, slide_data: dict, theme: ThemeConfig):
 
 def _render_fallback(slide, slide_data: dict, theme: ThemeConfig):
     """Generic fallback layout for unknown or failed slide types."""
+    from ppt.design_system import Grid, Typography, VLayout
+
     content = slide_data.get("content", {})
     title = content.get("title", "") or content.get("section_title", "") or ""
     body = content.get("body", "") or content.get("description", "") or ""
-    add_text_box(slide, title, Inches(0.5), Inches(0.3), Inches(12), Inches(1),
-                 theme.font_heading, theme.heading_size, bold=True, color=theme.primary)
+
+    left, width = Grid.full_width()
+    add_text_box(slide, title,
+                 Inches(left), Inches(VLayout.TITLE_TOP), Inches(width), Inches(VLayout.TITLE_HEIGHT),
+                 theme.font_heading, Typography.HEADING, bold=True, color=theme.primary)
     if body:
-        add_text_box(slide, body, Inches(0.5), Inches(1.5), Inches(12), Inches(5),
-                     theme.font_body, theme.body_size, color=theme.text)
+        add_text_box(slide, body,
+                     Inches(left), Inches(VLayout.CONTENT_START), Inches(width), Inches(4.5),
+                     theme.font_body, Typography.BODY, color=theme.text)

@@ -1,40 +1,53 @@
-from pptx.util import Inches, Pt  # type: ignore
+"""Quote slide — HERO layout with full-bleed background."""
+
+from pptx.util import Inches  # type: ignore
 from pptx.enum.text import PP_ALIGN  # type: ignore
-from ppt.generator import add_text_box, hex_to_rgb, set_background
+
+from ppt.generator import add_text_box, set_background
+from ppt.components import divider_line, body_text
+from ppt.design_system import (
+    ContentTransform, Grid, Spacing, Typography, VStack,
+)
 
 
 def render(slide, content: dict, theme, image_path=None):
     # Full-bleed primary background
     set_background(slide, theme.primary)
 
-    # Large opening quotation mark
+    flow = VStack(start_y=Spacing.XXL)
+
+    # Decorative: large opening quotation mark
+    y_mark = flow.next(height=1.5)
+    left_mark, _ = Grid.compute(2, offset=0)
     add_text_box(
         slide, "\u201C",
-        Inches(1.2), Inches(1.0), Inches(2), Inches(1.5),
+        Inches(left_mark), Inches(y_mark),
+        Inches(Grid.span_width(2)), Inches(1.5),
         theme.font_heading, 96, bold=True,
         color=theme.accent, align=PP_ALIGN.LEFT,
     )
 
-    # Quote text
-    add_text_box(
-        slide, content.get("quote", ""),
-        Inches(1.8), Inches(2.2), Inches(9.73), Inches(3.0),
-        theme.font_body, 28, bold=False,
-        color=theme.background, align=PP_ALIGN.LEFT,
+    # PRIMARY: Quote text — 9-col centred
+    y_quote = flow.next(height=2.8, gap=Spacing.XS)
+    q_left, q_width = Grid.center(9)
+    raw_quote = content.get("quote", "")
+    display = ContentTransform.truncate(raw_quote, max_words=30)
+    body_text(
+        slide, display, theme,
+        left=q_left, y=y_quote, width=q_width, height=2.8,
+        size=Typography.SUBHEADING, color=theme.background,
     )
 
-    # Thin accent line
-    bar = slide.shapes.add_shape(
-        1, Inches(1.8), Inches(5.5), Inches(2), Inches(0.06),
-    )
-    bar.fill.solid()
-    bar.fill.fore_color.rgb = hex_to_rgb(theme.accent)
-    bar.line.fill.background()
+    # Decorative: accent divider
+    y_div = flow.next(height=0.05, gap=Spacing.LG)
+    divider_line(slide, theme, y=y_div, span=3, center=False)
 
-    # Attribution
+    # SECONDARY: Attribution
+    y_attr = flow.next(height=0.6, gap=Spacing.MD)
     add_text_box(
         slide, content.get("attribution", ""),
-        Inches(1.8), Inches(5.8), Inches(9.73), Inches(0.6),
-        theme.font_body, 18, bold=True,
+        Inches(Grid.MARGIN + Spacing.SM), Inches(y_attr),
+        Inches(Grid.USABLE_WIDTH), Inches(0.6),
+        theme.font_body, Typography.BODY, bold=True,
         color=theme.background, align=PP_ALIGN.LEFT,
     )
