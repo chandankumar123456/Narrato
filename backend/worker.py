@@ -100,7 +100,7 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
         job_output_dir = os.path.join(settings.output_dir, safe_id)
         os.makedirs(job_output_dir, exist_ok=True)
         html_slide_paths = []
-        for idx, html in enumerate(html_slides):
+        for idx, html in enumerate(html_slides or []):
             slide_path = os.path.join(job_output_dir, f"slide_{idx + 1}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
                 f.write(html)
@@ -126,6 +126,6 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
             append_event(job_id, fail_evt.to_dict())
         except Exception:
             pass
-        set_job(job_id, status="failed", error=str(exc))
+        set_job(job_id, status="failed", error=str(exc), html_slides=[])
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc)
