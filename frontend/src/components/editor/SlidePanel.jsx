@@ -1,8 +1,6 @@
-import { useRef } from "react";
-
 /**
  * Left sidebar slide panel — thumbnail list with navigation,
- * drag reorder, delete, duplicate controls.
+ * delete, and duplicate controls.
  */
 export default function SlidePanel({
   slides,
@@ -12,9 +10,6 @@ export default function SlidePanel({
   onDelete,
   slideLoading,
 }) {
-  const dragItem = useRef(null);
-  const dragOverItem = useRef(null);
-
   return (
     <aside className="w-56 shrink-0 bg-[#0f0f14] border-r border-white/5 flex flex-col overflow-hidden">
       {/* Header */}
@@ -30,20 +25,13 @@ export default function SlidePanel({
         {slides.map((slide, idx) => (
           <div
             key={`slide-${slide.slide_id}-${idx}`}
-            draggable
-            onDragStart={() => { dragItem.current = idx; }}
-            onDragOver={(e) => { e.preventDefault(); dragOverItem.current = idx; }}
-            onDrop={() => {
-              dragItem.current = null;
-              dragOverItem.current = null;
-            }}
             onClick={() => onSelect(idx)}
             className={`group relative rounded-lg cursor-pointer transition-all duration-200
               ${activeSlide === idx
                 ? "ring-2 ring-indigo-500 bg-white/8"
                 : "hover:bg-white/5 ring-1 ring-white/5"
               }
-              ${slideLoading === idx ? "opacity-60 animate-pulse" : ""}
+              ${slideLoading === slide.slide_id ? "opacity-60 animate-pulse" : ""}
             `}
           >
             {/* Slide Number Badge */}

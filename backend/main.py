@@ -292,7 +292,11 @@ def _safe_job_dir(job_id: str) -> tuple[str, str]:
     safe_id = os.path.basename(job_id)
     job_dir = os.path.realpath(os.path.join(settings.output_dir, safe_id))
     real_output = os.path.realpath(settings.output_dir)
-    if not job_dir.startswith(real_output + os.sep):
+    try:
+        common = os.path.commonpath([job_dir, real_output])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+    if common != real_output:
         raise HTTPException(status_code=400, detail="Invalid job_id")
     return job_dir, safe_id
 
@@ -512,6 +516,43 @@ async def update_slide(job_id: str, req: UpdateSlideRequest):
     raise HTTPException(status_code=500, detail="Update produced no output")
 
 
+def _renumber_html_slides(job_id: str, html_slides: list[str]) -> list[str]:
+    """Re-save and renumber HTML slide files to ensure contiguous numbering.
+
+    Reads existing HTML content from old paths, writes to new sequential paths,
+    and cleans up stale files. Returns the updated list of html_slide paths.
+    """
+    job_output_dir, safe_id = _safe_job_dir(job_id)
+    os.makedirs(job_output_dir, exist_ok=True)
+
+    # Read all existing HTML content
+    contents = []
+    for path_url in html_slides:
+        # path_url is like /outputs/{safe_id}/slide_N.html
+        filename = os.path.basename(path_url)
+        filepath = os.path.join(job_output_dir, filename)
+        content = ""
+        if os.path.isfile(filepath):
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read()
+        contents.append(content)
+
+    # Remove all existing slide files in the directory
+    for existing in glob.glob(os.path.join(job_output_dir, "slide_*.html")):
+        os.remove(existing)
+
+    # Write new sequential files
+    new_paths = []
+    for idx, content in enumerate(contents):
+        new_num = idx + 1
+        new_file = os.path.join(job_output_dir, f"slide_{new_num}.html")
+        with open(new_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        new_paths.append(f"/outputs/{safe_id}/slide_{new_num}.html")
+
+    return new_paths
+
+
 @app.post("/reorder-slides/{job_id}")
 async def reorder_slides(job_id: str, req: ReorderRequest):
     """Reorder slides for a job."""
@@ -527,9 +568,12 @@ async def reorder_slides(job_id: str, req: ReorderRequest):
     if set(req.order) != expected:
         raise HTTPException(status_code=400, detail="Invalid slide order")
 
-    # Reorder
+    # Reorder in memory
     new_structured = [structured_slides[i - 1] for i in req.order]
     new_html = [html_slides[i - 1] for i in req.order]
+
+    # Renumber files on disk
+    new_html = _renumber_html_slides(job_id, new_html)
 
     update_job(job_id, structured_slides=new_structured, html_slides=new_html)
 
@@ -555,20 +599,12 @@ async def duplicate_slide(job_id: str, req: DuplicateSlideRequest):
     new_slide = copy.deepcopy(structured_slides[idx])
     structured_slides.insert(idx + 1, new_slide)
 
-    # Copy the HTML file on disk for the duplicated slide
-    if idx < len(html_slides):
-        original_html_path = html_slides[idx]
-        job_output_dir, safe_id = _safe_job_dir(job_id)
-        original_file = os.path.join(job_output_dir, f"slide_{req.slide_id}.html")
-        new_id = req.slide_id + 1
-        new_file = os.path.join(job_output_dir, f"slide_{new_id}.html")
-        if os.path.isfile(original_file):
-            shutil.copy2(original_file, new_file)
-        new_html_path = f"/outputs/{safe_id}/slide_{new_id}.html"
-    else:
-        logger.warning("No HTML path found for slide %d in job %s", req.slide_id, job_id)
-        new_html_path = ""
-    html_slides.insert(idx + 1, new_html_path)
+    # Duplicate the html path reference (temporary — will be renumbered)
+    dup_path = html_slides[idx] if idx < len(html_slides) else ""
+    html_slides.insert(idx + 1, dup_path)
+
+    # Renumber all files on disk to maintain consistency
+    html_slides = _renumber_html_slides(job_id, html_slides)
 
     update_job(job_id, structured_slides=structured_slides, html_slides=html_slides)
 
@@ -597,16 +633,12 @@ async def delete_slide(job_id: str, slide_id: int):
         raise HTTPException(status_code=400, detail="Cannot delete the last slide")
 
     idx = slide_id - 1
-
-    # Remove the HTML file from disk
+    structured_slides.pop(idx)
     if idx < len(html_slides):
-        job_output_dir, safe_id = _safe_job_dir(job_id)
-        slide_file = os.path.join(job_output_dir, f"slide_{slide_id}.html")
-        if os.path.isfile(slide_file):
-            os.remove(slide_file)
         html_slides.pop(idx)
 
-    structured_slides.pop(idx)
+    # Renumber remaining files on disk
+    html_slides = _renumber_html_slides(job_id, html_slides)
 
     update_job(job_id, structured_slides=structured_slides, html_slides=html_slides)
 

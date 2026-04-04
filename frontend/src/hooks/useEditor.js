@@ -4,7 +4,6 @@ import {
   regenerateSlide,
   restyleSlides,
   updateSlide,
-  reorderSlides,
   duplicateSlide,
   deleteSlide,
 } from "../api/narrato";
@@ -12,12 +11,14 @@ import {
 /**
  * Custom hook for the interactive slide editor.
  * Manages slide data, selection, and all editing operations.
+ *
+ * slideLoading stores the slide_id (1-based) currently being processed.
  */
 export default function useEditor(jobId) {
   const [slides, setSlides] = useState([]);
   const [activeSlide, setActiveSlide] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [slideLoading, setSlideLoading] = useState(null); // slide index being processed
+  const [slideLoading, setSlideLoading] = useState(null); // slide_id being processed
   const [theme, setTheme] = useState("dark_modern");
   const [error, setError] = useState(null);
 
@@ -45,7 +46,7 @@ export default function useEditor(jobId) {
 
   const handleRegenerate = useCallback(
     async (slideId, instruction) => {
-      setSlideLoading(slideId - 1);
+      setSlideLoading(slideId);
       setError(null);
       try {
         const result = await regenerateSlide(jobId, slideId, instruction);
@@ -108,7 +109,7 @@ export default function useEditor(jobId) {
 
   const handleUpdateSlide = useCallback(
     async (slideId, content) => {
-      setSlideLoading(slideId - 1);
+      setSlideLoading(slideId);
       setError(null);
       try {
         const result = await updateSlide(jobId, slideId, content);
@@ -168,34 +169,6 @@ export default function useEditor(jobId) {
     [jobId, slides.length, activeSlide]
   );
 
-  const handleReorder = useCallback(
-    async (fromIndex, toIndex) => {
-      if (fromIndex === toIndex) return;
-      setError(null);
-      const newSlides = [...slides];
-      const [moved] = newSlides.splice(fromIndex, 1);
-      newSlides.splice(toIndex, 0, moved);
-      const reindexed = newSlides.map((s, i) => ({
-        ...s,
-        slide_id: i + 1,
-        index: i,
-      }));
-      setSlides(reindexed);
-      setActiveSlide(toIndex);
-      try {
-        const order = reindexed.map((_, i) => {
-          // The original slide_id before reorder
-          return slides.indexOf(newSlides[i]) + 1;
-        });
-        await reorderSlides(jobId, order);
-      } catch (e) {
-        setError(e?.response?.data?.detail || "Reorder failed");
-        await loadSlides(); // rollback
-      }
-    },
-    [jobId, slides, loadSlides]
-  );
-
   return {
     slides,
     activeSlide,
@@ -211,6 +184,5 @@ export default function useEditor(jobId) {
     handleUpdateSlide,
     handleDuplicate,
     handleDelete,
-    handleReorder,
   };
 }

@@ -133,13 +133,19 @@ export default function EditModal({
     );
   }
 
+  // Prototype pollution guard
+  const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
   function setNestedValue(path, value) {
     const keys = path.split(".");
+    if (keys.some((k) => FORBIDDEN_KEYS.has(k))) return;
     setEditedContent((prev) => {
       const copy = JSON.parse(JSON.stringify(prev));
       let obj = copy;
       for (let i = 0; i < keys.length - 1; i++) {
-        if (!obj[keys[i]]) obj[keys[i]] = {};
+        if (!Object.hasOwn(obj, keys[i]) || typeof obj[keys[i]] !== "object") {
+          obj[keys[i]] = {};
+        }
         obj = obj[keys[i]];
       }
       obj[keys[keys.length - 1]] = value;
