@@ -295,6 +295,9 @@ class TestAutoFixOverlap:
         fixed = _auto_fix_overlap(section, overlapping)
         # Overlapping words should be removed from the first key_point
         assert fixed["key_points"][0] != section["key_points"][0]
+        # Verify overlapping words are actually removed
+        for word in ("shared", "phrase", "depot", "route", "pallet"):
+            assert word not in fixed["key_points"][0].lower()
         # Non-overlapping key_points should be unchanged
         assert fixed["key_points"][1] == "unique point"
         assert fixed["key_points"][2] == "another unique"
@@ -319,6 +322,9 @@ class TestDeduplicateConcepts:
         cleaned = _deduplicate_concepts(sections)
         # After dedup, the repeated phrase in section[1] should be modified
         assert cleaned[1]["key_points"][1] != repeated
+        # Verify the specific repeated words were removed
+        for word in ("shared", "phrase", "depot", "route", "pallet"):
+            assert word not in cleaned[1]["key_points"][1].lower()
 
     def test_preserves_non_overlapping_sections(self):
         sections = _mock_narrative_response()["sections"]

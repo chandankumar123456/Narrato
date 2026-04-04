@@ -531,13 +531,20 @@ def _auto_fix_overlap(section: dict, overlapping_phrases: set[str]) -> dict:
     fixed_points: list[str] = []
     for kp in section["key_points"]:
         words = kp.split()
-        cleaned = [
-            w for w in words
-            if re.sub(r"[^a-z0-9]", "", w.lower()) not in overlap_words
-            or re.sub(r"[^a-z0-9]", "", w.lower()) in STOPWORDS
-        ]
+        cleaned = []
+        for w in words:
+            norm = re.sub(r"[^a-z0-9]", "", w.lower())
+            if norm not in overlap_words or norm in STOPWORDS:
+                cleaned.append(w)
         result = " ".join(cleaned).strip()
-        fixed_points.append(result if result else kp)
+        if result:
+            fixed_points.append(result)
+        else:
+            logger.warning(
+                "[narrative] auto-fix removed all words from key_point in section '%s', keeping original",
+                section.get("id", "?"),
+            )
+            fixed_points.append(kp)
 
     return {**section, "key_points": fixed_points}
 
