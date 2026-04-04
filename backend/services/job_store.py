@@ -1,6 +1,8 @@
 """
 Redis-backed job store for persisting job status across restarts.
 Falls back to in-memory dict when Redis is unavailable.
+
+Also provides an append-only event log per job for SSE streaming.
 """
 
 import json
@@ -11,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 _redis_client = None
 _fallback_store: dict = {}
+
+# In-memory event logs: job_id -> list[dict]
+_event_store: dict[str, list[dict]] = {}
 
 
 def _get_redis():
@@ -36,11 +41,16 @@ def _get_redis():
 
 
 JOB_PREFIX = "narrato:job:"
+EVENT_PREFIX = "narrato:events:"
 JOB_TTL = 86400  # 24 hours
 
 
 def _key(job_id: str) -> str:
     return f"{JOB_PREFIX}{job_id}"
+
+
+def _event_key(job_id: str) -> str:
+    return f"{EVENT_PREFIX}{job_id}"
 
 
 def set_job(job_id: str, status: str, path: Optional[str] = None,
@@ -90,3 +100,35 @@ def update_job(job_id: str, **kwargs) -> None:
                     "html_slides": None, "structured_slides": None}
     existing.update({k: v for k, v in kwargs.items() if v is not None})
     set_job(job_id, **existing)
+
+
+# ── Event log helpers ──────────────────────────────────────────────
+
+
+def append_event(job_id: str, event: dict) -> None:
+    """Append a pipeline event to the job's event log."""
+    r = _get_redis()
+    if r is not None:
+        try:
+            r.rpush(_event_key(job_id), json.dumps(event))
+            r.expire(_event_key(job_id), JOB_TTL)
+            return
+        except Exception:
+            logger.exception("Redis append_event failed, falling back to memory")
+    _event_store.setdefault(job_id, []).append(event)
+
+
+def get_events(job_id: str, after: int = 0) -> list[dict]:
+    """Return events for a job starting from index *after*.
+
+    The caller tracks its cursor and passes it back so we only
+    return new events each time (efficient for SSE polling).
+    """
+    r = _get_redis()
+    if r is not None:
+        try:
+            raw_list = r.lrange(_event_key(job_id), after, -1)
+            return [json.loads(raw) for raw in raw_list]
+        except Exception:
+            logger.exception("Redis get_events failed, falling back to memory")
+    return _event_store.get(job_id, [])[after:]

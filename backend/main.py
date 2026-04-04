@@ -1,13 +1,14 @@
 import uuid, asyncio, os, logging, glob, subprocess, traceback, json, copy, shutil
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from orchestrator import run_pipeline
 from config import settings
-from services.job_store import set_job, get_job, update_job
+from services.job_store import set_job, get_job, update_job, append_event, get_events
+from services.event_system import PipelineEvent, EventType
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,16 @@ async def _run_job(job_id: str, prompt: str, options: dict):
         def _progress(pct: int):
             update_job(job_id, progress=pct)
 
-        result = await run_pipeline(prompt, options, progress_callback=_progress)
+        def _event(evt: PipelineEvent):
+            """Store event in the job event log for SSE streaming."""
+            append_event(job_id, evt.to_dict())
+            update_job(job_id, progress=evt.progress)
+
+        # Inject job_id into options so orchestrator can reference it
+        run_options = {**options, "_job_id": job_id}
+        result = await run_pipeline(prompt, run_options,
+                                    progress_callback=_progress,
+                                    event_callback=_event)
         # Support both old (str) and new (dict) return formats
         if isinstance(result, dict):
             path = result["pptx_path"]
@@ -132,6 +142,16 @@ async def _run_job(job_id: str, prompt: str, options: dict):
                 html_slides=html_slide_paths, structured_slides=structured_slides)
     except Exception as e:
         logger.exception("[api] Job %s failed", job_id)
+        # Emit failure event
+        fail_evt = PipelineEvent(
+            job_id=job_id,
+            type=EventType.JOB_FAILED,
+            stage="failed",
+            progress=0,
+            label="Generation failed",
+            data={"error": str(e)},
+        )
+        append_event(job_id, fail_evt.to_dict())
         set_job(job_id, status="failed", error=str(e))
 
 
@@ -282,6 +302,65 @@ async def health():
     health_data["celery"] = "connected" if _try_celery() else "unavailable"
 
     return health_data
+
+
+# ── Server-Sent Events (SSE) streaming endpoint ───────────────────
+
+
+@app.get("/stream/{job_id}")
+async def stream_events(job_id: str, request: Request):
+    """Stream pipeline events via SSE.
+
+    The client opens an EventSource connection. We poll the event log
+    and push new events as they arrive. The stream closes on
+    JOB_COMPLETED or JOB_FAILED.
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    async def event_generator():
+        cursor = 0
+        while True:
+            # Check if client disconnected
+            if await request.is_disconnected():
+                break
+
+            new_events = get_events(job_id, after=cursor)
+            for evt in new_events:
+                yield f"data: {json.dumps(evt)}\n\n"
+                cursor += 1
+
+                # Stop streaming after terminal events
+                if evt.get("type") in (EventType.JOB_COMPLETED, EventType.JOB_FAILED):
+                    return
+
+            # Also check job status for terminal state (safety net)
+            current_job = get_job(job_id)
+            if current_job and current_job.get("status") in ("completed", "failed"):
+                # If job is done but we already sent a terminal event, stop
+                if any(e.get("type") in (EventType.JOB_COMPLETED, EventType.JOB_FAILED)
+                       for e in new_events):
+                    return
+                # If no terminal event in log yet but job is done, synthesize one
+                if cursor > 0:
+                    if current_job["status"] == "completed":
+                        yield f"data: {json.dumps({'type': EventType.JOB_COMPLETED, 'stage': 'completed', 'progress': 100, 'label': 'Presentation ready!'})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'type': EventType.JOB_FAILED, 'stage': 'failed', 'progress': 0, 'label': 'Generation failed', 'data': {'error': current_job.get('error', '')}})}\n\n"
+                    return
+
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ── Interactive Product Layer endpoints ────────────────────────────────

@@ -64,7 +64,7 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
     if _bd not in sys.path:
         sys.path.insert(0, _bd)
 
-    from services.job_store import set_job, update_job
+    from services.job_store import set_job, update_job, append_event
 
     try:
         update_job(job_id, status="processing", progress=5)
@@ -72,8 +72,16 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
         def _progress(pct: int):
             update_job(job_id, progress=pct)
 
+        def _event(evt):
+            """Store event in the job event log for SSE streaming."""
+            append_event(job_id, evt.to_dict())
+            update_job(job_id, progress=evt.progress)
+
         from orchestrator import run_pipeline
-        result = _run_async(run_pipeline(prompt, options, progress_callback=_progress))
+        run_options = {**options, "_job_id": job_id}
+        result = _run_async(run_pipeline(prompt, run_options,
+                                         progress_callback=_progress,
+                                         event_callback=_event))
 
         # Support both old (str) and new (dict) return formats
         if isinstance(result, dict):
@@ -103,6 +111,18 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
 
     except Exception as exc:
         logger.exception("[celery] Job %s failed", job_id)
+        # Emit failure event
+        try:
+            from services.event_system import PipelineEvent, EventType
+            fail_evt = PipelineEvent(
+                job_id=job_id, type=EventType.JOB_FAILED,
+                stage="failed", progress=0,
+                label="Generation failed",
+                data={"error": str(exc)},
+            )
+            append_event(job_id, fail_evt.to_dict())
+        except Exception:
+            pass
         set_job(job_id, status="failed", error=str(exc))
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc)
