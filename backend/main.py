@@ -56,6 +56,8 @@ class StatusResponse(BaseModel):
     preview_urls: Optional[list] = None
     html_slides: Optional[list] = None
     error: Optional[str] = None
+    pdf_path: Optional[str] = None
+    image_paths: Optional[list] = None
 
 
 class ErrorResponse(BaseModel):
@@ -139,7 +141,7 @@ async def _run_job(job_id: str, prompt: str, options: dict):
         job_output_dir = os.path.join(settings.output_dir, safe_id)
         os.makedirs(job_output_dir, exist_ok=True)
         html_slide_paths = []
-        for idx, html in enumerate(html_slides):
+        for idx, html in enumerate(html_slides or []):
             slide_path = os.path.join(job_output_dir, f"slide_{idx + 1}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
                 f.write(html)
@@ -160,7 +162,7 @@ async def _run_job(job_id: str, prompt: str, options: dict):
             data={"error": str(e)},
         )
         append_event(job_id, fail_evt.to_dict())
-        set_job(job_id, status="failed", error=str(e))
+        set_job(job_id, status="failed", error=str(e), html_slides=[])
 
 
 @app.get("/status/{job_id}", response_model=StatusResponse)
@@ -177,9 +179,13 @@ async def status(job_id: str):
     if job["status"] == "completed":
         resp.download_url = f"/download/{job_id}"
         resp.preview_urls = job.get("preview_urls")
-        resp.html_slides = job.get("html_slides")
+        resp.html_slides = job.get("html_slides") or []
+        resp.pdf_path = job.get("pdf_path")
+        resp.image_paths = job.get("image_paths") or []
     if job["status"] == "failed":
         resp.error = job.get("error")
+        resp.html_slides = []
+        resp.image_paths = []
     return resp
 
 
@@ -220,7 +226,7 @@ async def generate_preview(job_id: str):
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="Job not completed")
 
-    html_slides = job.get("html_slides", [])
+    html_slides = job.get("html_slides") or []
     if html_slides:
         return {"preview_urls": html_slides}
 
@@ -377,12 +383,12 @@ async def get_slides(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    html_slides = job.get("html_slides", [])
-    structured_slides = job.get("structured_slides", [])
+    html_slides = job.get("html_slides") or []
+    structured_slides = job.get("structured_slides") or []
 
     # Build response with slide content
     slides = []
-    for idx, path in enumerate(html_slides):
+    for idx, path in enumerate(html_slides or []):
         slide_data = {
             "slide_id": idx + 1,
             "html_url": path,
@@ -408,8 +414,8 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="Job not completed")
 
-    structured_slides = job.get("structured_slides", [])
-    html_slides = job.get("html_slides", [])
+    structured_slides = job.get("structured_slides") or []
+    html_slides = job.get("html_slides") or []
 
     if req.slide_id < 1 or req.slide_id > len(structured_slides):
         raise HTTPException(status_code=400, detail="Invalid slide_id")
@@ -477,7 +483,7 @@ async def restyle_slides(job_id: str, req: RestyleRequest):
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="Job not completed")
 
-    structured_slides = job.get("structured_slides", [])
+    structured_slides = job.get("structured_slides") or []
     if not structured_slides:
         raise HTTPException(status_code=400, detail="No slides to restyle")
 
@@ -492,7 +498,7 @@ async def restyle_slides(job_id: str, req: RestyleRequest):
         job_output_dir, safe_id = _safe_job_dir(job_id)
         os.makedirs(job_output_dir, exist_ok=True)
         html_slide_paths = []
-        for idx, html in enumerate(html_slides):
+        for idx, html in enumerate(html_slides or []):
             slide_path = os.path.join(job_output_dir, f"slide_{idx + 1}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
                 f.write(html)
@@ -521,7 +527,7 @@ async def update_slide(job_id: str, req: UpdateSlideRequest):
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="Job not completed")
 
-    structured_slides = job.get("structured_slides", [])
+    structured_slides = job.get("structured_slides") or []
     if req.slide_id < 1 or req.slide_id > len(structured_slides):
         raise HTTPException(status_code=400, detail="Invalid slide_id")
 
@@ -634,8 +640,8 @@ async def reorder_slides(job_id: str, req: ReorderRequest):
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="Job not completed")
 
-    structured_slides = job.get("structured_slides", [])
-    html_slides = job.get("html_slides", [])
+    structured_slides = job.get("structured_slides") or []
+    html_slides = job.get("html_slides") or []
 
     # Validate all indices
     expected = set(range(1, len(structured_slides) + 1))
@@ -661,8 +667,8 @@ async def duplicate_slide(job_id: str, req: DuplicateSlideRequest):
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="Job not completed")
 
-    structured_slides = job.get("structured_slides", [])
-    html_slides = job.get("html_slides", [])
+    structured_slides = job.get("structured_slides") or []
+    html_slides = job.get("html_slides") or []
 
     if req.slide_id < 1 or req.slide_id > len(structured_slides):
         raise HTTPException(status_code=400, detail="Invalid slide_id")
@@ -697,8 +703,8 @@ async def delete_slide(job_id: str, slide_id: int):
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="Job not completed")
 
-    structured_slides = job.get("structured_slides", [])
-    html_slides = job.get("html_slides", [])
+    structured_slides = job.get("structured_slides") or []
+    html_slides = job.get("html_slides") or []
 
     if slide_id < 1 or slide_id > len(structured_slides):
         raise HTTPException(status_code=400, detail="Invalid slide_id")

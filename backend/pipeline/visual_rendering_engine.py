@@ -5,8 +5,8 @@ Renders each HTML slide at 1920×1080 to:
   - PNG images
   - PDF (combined slides)
 
-Uses the **synchronous** Playwright API to avoid async subprocess
-incompatibilities (e.g. NotImplementedError on Windows / nested event loops).
+Uses the **async** Playwright API for compatibility with FastAPI's
+async event loop.
 
 When Playwright is not installed, produces render instructions only
 (HTML can be rendered externally).
@@ -39,18 +39,18 @@ def build_render_instructions(slide_count: int) -> dict:
     }
 
 
-def render_slides_to_images(
+async def render_slides_to_images(
     html_slides: list[str],
     output_dir: str,
 ) -> list[str]:
     """
-    Render HTML slides to PNG images using Playwright (sync API).
+    Render HTML slides to PNG images using Playwright (async API).
 
     Returns list of PNG file paths.  If Playwright is not available,
     returns an empty list (caller should fall back to HTML-only export).
     """
     try:
-        from playwright.sync_api import sync_playwright  # type: ignore
+        from playwright.async_api import async_playwright  # type: ignore
     except ImportError:
         logger.warning(
             "[rendering_engine] Playwright not installed — "
@@ -63,25 +63,25 @@ def render_slides_to_images(
     image_paths: list[str] = []
 
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
                 viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
                 device_scale_factor=1,
             )
 
-            for idx, slide_html in enumerate(html_slides):
-                page = context.new_page()
-                page.set_content(slide_html, wait_until="networkidle")
+            for idx, slide_html in enumerate(html_slides or []):
+                page = await context.new_page()
+                await page.set_content(slide_html, wait_until="networkidle")
                 # Allow Tailwind CDN to parse and apply utility classes
-                page.wait_for_timeout(500)
+                await page.wait_for_timeout(500)
 
                 png_path = os.path.join(output_dir, f"slide_{idx + 1}.png")
-                page.screenshot(path=png_path, full_page=False)
+                await page.screenshot(path=png_path, full_page=False)
                 image_paths.append(png_path)
-                page.close()
+                await page.close()
 
-            browser.close()
+            await browser.close()
 
         logger.info(
             "[rendering_engine] Rendered %d slides to PNG", len(image_paths)
@@ -92,17 +92,17 @@ def render_slides_to_images(
     return image_paths
 
 
-def render_slides_to_pdf(
+async def render_slides_to_pdf(
     html_slides: list[str],
     output_dir: str,
 ) -> Optional[str]:
     """
-    Render all HTML slides into a single PDF using Playwright (sync API).
+    Render all HTML slides into a single PDF using Playwright (async API).
 
     Returns the PDF path or None if Playwright is unavailable.
     """
     try:
-        from playwright.sync_api import sync_playwright  # type: ignore
+        from playwright.async_api import async_playwright  # type: ignore
     except ImportError:
         logger.warning("[rendering_engine] Playwright not installed — skipping PDF")
         return None
@@ -110,23 +110,23 @@ def render_slides_to_pdf(
     os.makedirs(output_dir, exist_ok=True)
 
     # Build a combined HTML document with page breaks between slides
-    combined_html = _build_combined_html(html_slides)
+    combined_html = _build_combined_html(html_slides or [])
     pdf_path = os.path.join(output_dir, "presentation.pdf")
 
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.set_content(combined_html, wait_until="networkidle")
-            page.wait_for_timeout(500)
-            page.pdf(
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            await page.set_content(combined_html, wait_until="networkidle")
+            await page.wait_for_timeout(500)
+            await page.pdf(
                 path=pdf_path,
                 width=f"{VIEWPORT_WIDTH}px",
                 height=f"{VIEWPORT_HEIGHT}px",
                 print_background=True,
                 prefer_css_page_size=True,
             )
-            browser.close()
+            await browser.close()
 
         logger.info("[rendering_engine] Generated PDF: %s", pdf_path)
         return pdf_path
@@ -172,12 +172,12 @@ def _build_combined_html(html_slides: list[str]) -> str:
 </html>"""
 
 
-def run_rendering_engine(
+async def run_rendering_engine(
     html_slides: list[str],
     output_dir: str,
 ) -> dict:
     """
-    Stage 3 entry point (synchronous).
+    Stage 3 entry point (async).
 
     Produces render instructions and optionally renders slides to
     PNG images and PDF using Playwright.
@@ -189,11 +189,21 @@ def run_rendering_engine(
             "pdf_path": str | None,
         }
     """
-    render_instructions = build_render_instructions(len(html_slides))
+    safe_slides = html_slides or []
+    render_instructions = build_render_instructions(len(safe_slides))
 
     # Attempt browser rendering (graceful degradation if Playwright missing)
-    image_paths = render_slides_to_images(html_slides, output_dir)
-    pdf_path = render_slides_to_pdf(html_slides, output_dir)
+    try:
+        image_paths = await render_slides_to_images(safe_slides, output_dir)
+    except Exception:
+        logger.warning("[rendering_engine] fallback: rendering skipped")
+        image_paths = []
+
+    try:
+        pdf_path = await render_slides_to_pdf(safe_slides, output_dir)
+    except Exception:
+        logger.warning("[rendering_engine] fallback: rendering skipped")
+        pdf_path = None
 
     return {
         "render_instructions": render_instructions,

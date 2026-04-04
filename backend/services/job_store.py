@@ -56,7 +56,9 @@ def _event_key(job_id: str) -> str:
 def set_job(job_id: str, status: str, path: Optional[str] = None,
             error: Optional[str] = None, progress: Optional[int] = None,
             preview_urls: Optional[list] = None, html_slides: Optional[list] = None,
-            structured_slides: Optional[list] = None) -> None:
+            structured_slides: Optional[list] = None,
+            pdf_path: Optional[str] = None,
+            image_paths: Optional[list] = None) -> None:
     """Create or update a job entry."""
     data = {
         "status": status,
@@ -64,8 +66,10 @@ def set_job(job_id: str, status: str, path: Optional[str] = None,
         "error": error,
         "progress": progress,
         "preview_urls": preview_urls,
-        "html_slides": html_slides,
+        "html_slides": html_slides if html_slides is not None else [],
         "structured_slides": structured_slides,
+        "pdf_path": pdf_path,
+        "image_paths": image_paths if image_paths is not None else [],
     }
     r = _get_redis()
     if r is not None:
@@ -97,7 +101,8 @@ def update_job(job_id: str, **kwargs) -> None:
     if existing is None:
         existing = {"status": "unknown", "path": None, "error": None,
                     "progress": None, "preview_urls": None,
-                    "html_slides": None, "structured_slides": None}
+                    "html_slides": [], "structured_slides": None,
+                    "pdf_path": None, "image_paths": []}
     existing.update({k: v for k, v in kwargs.items() if v is not None})
     set_job(job_id, **existing)
 

@@ -425,11 +425,12 @@ class TestPipelineFailure:
 
 
 class TestVisualPipelinePlaywrightSkip:
-    def test_rendering_engine_graceful_without_playwright(self):
+    @pytest.mark.asyncio
+    async def test_rendering_engine_graceful_without_playwright(self):
         """Rendering engine returns empty lists when Playwright is not installed."""
         from pipeline.visual_rendering_engine import render_slides_to_images
         # This should return empty list gracefully (Playwright not installed in test env)
-        result = render_slides_to_images(["<html></html>"], "/tmp/test_render")
+        result = await render_slides_to_images(["<html></html>"], "/tmp/test_render")
         assert isinstance(result, list)
 
 

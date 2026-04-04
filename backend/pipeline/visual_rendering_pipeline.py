@@ -60,10 +60,10 @@ async def run_visual_pipeline(state) -> dict:
     logger.info("[visual_pipeline] Stage 2: Template Engine")
     html_slides = run_template_engine(designs)
 
-    # ── Stage 3: Rendering Engine (sync, graceful degradation) ──
+    # ── Stage 3: Rendering Engine (async, graceful degradation) ──
     logger.info("[visual_pipeline] Stage 3: Rendering Engine")
     try:
-        render_result = run_rendering_engine(html_slides, output_dir)
+        render_result = await run_rendering_engine(html_slides, output_dir)
     except Exception as exc:
         logger.warning("[visual_pipeline] Rendering failed: %s — continuing without images", exc)
         render_result = _empty_render_result(len(html_slides))
