@@ -1,4 +1,4 @@
-import uuid, asyncio, os, logging, glob, subprocess, traceback, json, copy
+import uuid, asyncio, os, logging, glob, subprocess, traceback, json, copy, shutil
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -118,14 +118,15 @@ async def _run_job(job_id: str, prompt: str, options: dict):
             structured_slides = []
 
         # Save HTML slides to job-specific directory
-        job_output_dir = os.path.join(settings.output_dir, job_id)
+        safe_id = os.path.basename(job_id)
+        job_output_dir = os.path.join(settings.output_dir, safe_id)
         os.makedirs(job_output_dir, exist_ok=True)
         html_slide_paths = []
         for idx, html in enumerate(html_slides):
             slide_path = os.path.join(job_output_dir, f"slide_{idx + 1}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
                 f.write(html)
-            html_slide_paths.append(f"/outputs/{job_id}/slide_{idx + 1}.html")
+            html_slide_paths.append(f"/outputs/{safe_id}/slide_{idx + 1}.html")
 
         set_job(job_id, status="completed", path=path, progress=100,
                 html_slides=html_slide_paths, structured_slides=structured_slides)
@@ -286,6 +287,16 @@ async def health():
 # ── Interactive Product Layer endpoints ────────────────────────────────
 
 
+def _safe_job_dir(job_id: str) -> str:
+    """Return a validated job output directory, preventing path traversal."""
+    safe_id = os.path.basename(job_id)
+    job_dir = os.path.realpath(os.path.join(settings.output_dir, safe_id))
+    real_output = os.path.realpath(settings.output_dir)
+    if not job_dir.startswith(real_output + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+    return job_dir
+
+
 class RegenerateSlideRequest(BaseModel):
     slide_id: int
     instruction: str = ""
@@ -386,7 +397,7 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
             new_html = new_html_list[0]
 
             # Save the new HTML
-            job_output_dir = os.path.join(settings.output_dir, job_id)
+            job_output_dir = _safe_job_dir(job_id)
             os.makedirs(job_output_dir, exist_ok=True)
             slide_path = os.path.join(job_output_dir, f"slide_{req.slide_id}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
@@ -428,7 +439,7 @@ async def restyle_slides(job_id: str, req: RestyleRequest):
         html_slides = run_template_engine(designs)
 
         # Save restyled HTML slides
-        job_output_dir = os.path.join(settings.output_dir, job_id)
+        job_output_dir = _safe_job_dir(job_id)
         os.makedirs(job_output_dir, exist_ok=True)
         html_slide_paths = []
         for idx, html in enumerate(html_slides):
@@ -480,7 +491,7 @@ async def update_slide(job_id: str, req: UpdateSlideRequest):
 
         if new_html_list:
             new_html = new_html_list[0]
-            job_output_dir = os.path.join(settings.output_dir, job_id)
+            job_output_dir = _safe_job_dir(job_id)
             os.makedirs(job_output_dir, exist_ok=True)
             slide_path = os.path.join(job_output_dir, f"slide_{req.slide_id}.html")
             with open(slide_path, "w", encoding="utf-8") as f:
@@ -544,8 +555,19 @@ async def duplicate_slide(job_id: str, req: DuplicateSlideRequest):
     new_slide = copy.deepcopy(structured_slides[idx])
     structured_slides.insert(idx + 1, new_slide)
 
-    # Duplicate the HTML path reference
-    new_html_path = html_slides[idx] if idx < len(html_slides) else ""
+    # Copy the HTML file on disk for the duplicated slide
+    if idx < len(html_slides):
+        original_html_path = html_slides[idx]
+        job_output_dir = _safe_job_dir(job_id)
+        original_file = os.path.join(job_output_dir, f"slide_{req.slide_id}.html")
+        new_id = req.slide_id + 1
+        new_file = os.path.join(job_output_dir, f"slide_{new_id}.html")
+        if os.path.isfile(original_file):
+            shutil.copy2(original_file, new_file)
+        new_html_path = f"/outputs/{os.path.basename(job_id)}/slide_{new_id}.html"
+    else:
+        logger.warning("No HTML path found for slide %d in job %s", req.slide_id, job_id)
+        new_html_path = ""
     html_slides.insert(idx + 1, new_html_path)
 
     update_job(job_id, structured_slides=structured_slides, html_slides=html_slides)
@@ -575,9 +597,16 @@ async def delete_slide(job_id: str, slide_id: int):
         raise HTTPException(status_code=400, detail="Cannot delete the last slide")
 
     idx = slide_id - 1
-    structured_slides.pop(idx)
+
+    # Remove the HTML file from disk
     if idx < len(html_slides):
+        job_output_dir = _safe_job_dir(job_id)
+        slide_file = os.path.join(job_output_dir, f"slide_{slide_id}.html")
+        if os.path.isfile(slide_file):
+            os.remove(slide_file)
         html_slides.pop(idx)
+
+    structured_slides.pop(idx)
 
     update_job(job_id, structured_slides=structured_slides, html_slides=html_slides)
 
