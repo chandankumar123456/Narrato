@@ -177,7 +177,10 @@ async def run_pipeline(prompt: str, options: dict = {},
         try:
             state = await generate_narrative(state)
         except Exception as exc:
-            _fail("narrative_generation", str(exc))
+            logger.warning("[pipeline] narrative_generation failed: %s — pipeline will continue", exc)
+            # Only fail if no slides were generated at all (true LLM failure)
+            if not state.structured_slides:
+                _fail("narrative_generation", str(exc))
 
         total_slides = len(state.structured_slides or [])
         total_steps = GLOBAL_STEPS + (total_slides * per_slide_steps)
