@@ -275,7 +275,7 @@ class TestTemplateEngine:
         designs = run_design_engine(SAMPLE_SLIDES, state_theme="corporate")
         html_slides = run_template_engine(designs)
         for h in html_slides:
-            assert "bg-white" in h
+            assert "from-white" in h or "bg-white" in h
 
     def test_bold_gradient_theme(self):
         designs = run_design_engine(SAMPLE_SLIDES, state_theme="bold_gradient")
@@ -460,3 +460,154 @@ class TestVisualPipeline:
             assert "Inter" in html_str
             # No scrolling
             assert "overflow:hidden" in html_str
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  Visual Design Intelligence Quality Tests
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+class TestVisualDesignQuality:
+    """Tests ensuring the design intelligence rules are applied."""
+
+    def _get_html(self, slides, theme="modern"):
+        designs = run_design_engine(slides, state_theme=theme)
+        return run_template_engine(designs)
+
+    # ── Rule 1: Visual Hierarchy ────────────────────────────────
+
+    def test_title_uses_dominant_typography(self):
+        """Title must use text-6xl or larger to dominate slide."""
+        html_slides = self._get_html(SAMPLE_SLIDES)
+        for h in html_slides:
+            assert "text-8xl" in h or "text-6xl" in h
+
+    def test_supporting_text_is_secondary(self):
+        """Supporting content must use muted/secondary text color."""
+        html_slides = self._get_html(SAMPLE_SLIDES)
+        for h in html_slides:
+            # At least one secondary or muted text class present
+            assert ("text-white/70" in h or "text-white/40" in h
+                    or "text-gray-500" in h or "text-gray-400" in h
+                    or "text-pink-100/80" in h or "text-pink-200/40" in h)
+
+    # ── Rule 2: Focal Point Design ──────────────────────────────
+
+    def test_hero_has_gradient_title(self):
+        """Hero slide title must use gradient text for focal emphasis."""
+        html_slides = self._get_html(SAMPLE_SLIDES[:1])
+        assert "bg-clip-text" in html_slides[0]
+        assert "text-transparent" in html_slides[0]
+
+    def test_stats_first_item_is_dominant(self):
+        """Stats slide: first stat must be visually larger (text-7xl)."""
+        html_slides = self._get_html([SAMPLE_SLIDES[2]])
+        assert "text-7xl" in html_slides[0]
+
+    def test_grid_cards_first_card_emphasized(self):
+        """Grid cards: first card should span columns for focal weight."""
+        html_slides = self._get_html([SAMPLE_SLIDES[1]])
+        assert "col-span-2" in html_slides[0]
+
+    # ── Rule 3: Spacing Rhythm (Asymmetric) ─────────────────────
+
+    def test_asymmetric_slide_padding(self):
+        """Slide wrapper must use asymmetric padding (not uniform p-16)."""
+        html_slides = self._get_html(SAMPLE_SLIDES)
+        for h in html_slides:
+            assert "pt-24" in h
+            assert "pb-12" in h
+            assert "px-24" in h
+
+    # ── Rule 4: Premium Card Design ─────────────────────────────
+
+    def test_cards_have_shadow(self):
+        """Cards must have shadow for depth."""
+        # Problem slide uses grid_cards
+        html_slides = self._get_html([SAMPLE_SLIDES[1]])
+        assert "shadow-2xl" in html_slides[0] or "shadow-xl" in html_slides[0]
+
+    def test_cards_have_backdrop_blur(self):
+        """Dark theme cards must have backdrop-blur for glass effect."""
+        html_slides = self._get_html([SAMPLE_SLIDES[1]], theme="modern")
+        assert "backdrop-blur" in html_slides[0]
+
+    def test_cards_have_rounded_corners(self):
+        """Cards must have rounded-2xl or higher."""
+        html_slides = self._get_html([SAMPLE_SLIDES[1]])
+        assert "rounded-2xl" in html_slides[0] or "rounded-3xl" in html_slides[0]
+
+    # ── Rule 5: Typography Scale ────────────────────────────────
+
+    def test_hero_title_is_8xl(self):
+        """Hero title must be text-8xl (largest in hierarchy)."""
+        html_slides = self._get_html(SAMPLE_SLIDES[:1])
+        assert "text-8xl" in html_slides[0]
+
+    def test_section_titles_are_6xl(self):
+        """Non-hero section titles must be text-6xl."""
+        # grid_cards, stats, step_flow etc.
+        html_slides = self._get_html([SAMPLE_SLIDES[1]])
+        assert "text-6xl" in html_slides[0]
+
+    def test_max_width_constrains_titles(self):
+        """Titles should be constrained by max-w for readability."""
+        html_slides = self._get_html(SAMPLE_SLIDES[:1])
+        assert "max-w-" in html_slides[0]
+
+    # ── Rule 6: Composed Layouts ────────────────────────────────
+
+    def test_stats_uses_composed_grid(self):
+        """Stats layout must use col-span-2 for first stat (asymmetric)."""
+        html_slides = self._get_html([SAMPLE_SLIDES[2]])
+        assert "col-span-2" in html_slides[0]
+        assert "grid-cols-3" in html_slides[0]
+
+    # ── Rule 7: Visual Accents ──────────────────────────────────
+
+    def test_accent_bars_present(self):
+        """Slides should have accent bars/lines for visual polish."""
+        html_slides = self._get_html(SAMPLE_SLIDES)
+        accent_count = 0
+        for h in html_slides:
+            if "bg-gradient-to-r" in h:
+                accent_count += 1
+        # At least half the slides should have accent gradients
+        assert accent_count >= len(html_slides) // 2
+
+    def test_hero_has_accent_bar(self):
+        """Hero slide must have accent bar above or below title."""
+        html_slides = self._get_html(SAMPLE_SLIDES[:1])
+        # Should have a small gradient bar element
+        assert "rounded-full" in html_slides[0]
+        assert "bg-gradient-to-r" in html_slides[0]
+
+    def test_step_flow_has_connectors(self):
+        """Step flow should have connecting lines between steps."""
+        html_slides = self._get_html([SAMPLE_SLIDES[3]])
+        # Connector between steps
+        assert "bg-gradient-to-b" in html_slides[0]
+
+    def test_timeline_has_gradient_spine(self):
+        """Timeline should have gradient accent spine."""
+        html_slides = self._get_html([SAMPLE_SLIDES[4]])
+        assert "bg-gradient-to-r" in html_slides[0] or "bg-gradient-to-b" in html_slides[0]
+
+    # ── Cross-theme consistency ──────────────────────────────────
+
+    def test_all_themes_have_accent_lines(self):
+        """All three themes must produce accent line elements."""
+        for theme in ["modern", "corporate", "bold_gradient"]:
+            html_slides = self._get_html(SAMPLE_SLIDES[:1], theme=theme)
+            assert "bg-gradient-to-r" in html_slides[0], f"Theme {theme} missing accent line"
+
+    def test_all_themes_produce_gradient_titles(self):
+        """All themes must use gradient titles for visual hierarchy."""
+        for theme in ["modern", "corporate", "bold_gradient"]:
+            html_slides = self._get_html(SAMPLE_SLIDES[:1], theme=theme)
+            assert "bg-clip-text" in html_slides[0], f"Theme {theme} missing gradient title"
+
+    def test_font_smoothing_enabled(self):
+        """Antialiased font smoothing must be enabled."""
+        html_slides = self._get_html(SAMPLE_SLIDES[:1])
+        assert "font-smoothing" in html_slides[0]
