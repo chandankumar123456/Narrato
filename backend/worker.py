@@ -83,15 +83,17 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
                                          progress_callback=_progress,
                                          event_callback=_event))
 
-        # Support both old (str) and new (dict) return formats
+        # Extract results from pipeline (always returns dict)
         if isinstance(result, dict):
-            output_path = result["pptx_path"]
             html_slides = result.get("html_slides", [])
             structured_slides = result.get("structured_slides", [])
+            pdf_path = result.get("pdf_path")
+            image_paths = result.get("image_paths", [])
         else:
-            output_path = result
             html_slides = []
             structured_slides = []
+            pdf_path = None
+            image_paths = []
 
         # Save HTML slides to job-specific directory
         safe_id = os.path.basename(job_id)
@@ -104,10 +106,11 @@ def generate_presentation_task(self, job_id: str, prompt: str, options: dict):
                 f.write(html)
             html_slide_paths.append(f"/outputs/{safe_id}/slide_{idx + 1}.html")
 
-        set_job(job_id, status="completed", path=output_path, progress=100,
-                html_slides=html_slide_paths, structured_slides=structured_slides)
-        logger.info("[celery] Job %s completed: %s", job_id, output_path)
-        return {"status": "completed", "path": output_path}
+        set_job(job_id, status="completed", progress=100,
+                html_slides=html_slide_paths, structured_slides=structured_slides,
+                pdf_path=pdf_path, image_paths=image_paths)
+        logger.info("[celery] Job %s completed", job_id)
+        return {"status": "completed"}
 
     except Exception as exc:
         logger.exception("[celery] Job %s failed", job_id)

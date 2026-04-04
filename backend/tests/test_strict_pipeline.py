@@ -427,22 +427,15 @@ class TestHelpers:
 
 
 # =====================================================================
-# Phase 7: PPT generation with example_detail_slide
+# Phase 7: Visual rendering with strict slides (replaces PPT test)
 # =====================================================================
 
-class TestExampleDetailSlideRendering:
-    def test_generate_ppt_with_strict_slides(self):
-        """Verify that a strict-mode state with example_detail_slide renders without error."""
-        import os
-        from ppt.generator import generate_ppt
+class TestStrictSlideVisualRendering:
+    def test_visual_pipeline_with_strict_slides(self):
+        """Verify that a strict-mode state renders through the visual design + template pipeline."""
+        from pipeline.visual_design_engine import run_design_engine
+        from pipeline.visual_template_engine import run_template_engine
 
-        schema_dict = {
-            "topic": "food commodities",
-            "examples_required": 2,
-            "fields_required": ["origin", "history"],
-            "forbidden_content": [],
-            "is_structured_request": True,
-        }
         slides = [
             {"slide_id": 0, "type": "title_slide",
              "content": {"title": "Food Commodities", "subtitle": "Overview", "presenter": ""}, "image_path": None},
@@ -462,23 +455,15 @@ class TestExampleDetailSlideRendering:
              "image_path": None},
         ]
 
-        state = PresentationState(
-            topic="food commodities",
-            user_schema=schema_dict,
-            generation_mode="strict",
-            structured_slides=slides,
-            speaker_notes=[{"slide_id": i, "notes": f"Notes {i}"} for i in range(5)],
-        )
+        designs = run_design_engine(slides)
+        assert len(designs) == 5
 
-        path = generate_ppt(state)
-        assert os.path.isfile(path)
-        assert path.endswith(".pptx")
+        html_slides = run_template_engine(designs)
+        assert len(html_slides) == 5
 
-        from pptx import Presentation
-        prs = Presentation(path)
-        assert len(prs.slides) == 5
-
-        os.remove(path)
+        for html in html_slides:
+            assert "<!DOCTYPE html>" in html
+            assert "tailwindcss" in html
 
 
 # =====================================================================

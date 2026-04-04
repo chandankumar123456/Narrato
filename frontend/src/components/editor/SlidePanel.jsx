@@ -1,6 +1,9 @@
 /**
  * Left sidebar slide panel — thumbnail list with navigation,
  * delete, and duplicate controls.
+ *
+ * Each thumbnail renders an iframe at 1920×1080 scaled down
+ * to fit the thumbnail container via CSS transform.
  */
 export default function SlidePanel({
   slides,
@@ -10,6 +13,12 @@ export default function SlidePanel({
   onDelete,
   slideLoading,
 }) {
+  // Thumbnail width inside the panel (accounting for padding)
+  // Panel is w-56 (224px), with px-3 (12px each side) = 200px available
+  const thumbW = 200;
+  const thumbScale = thumbW / 1920;
+  const thumbH = Math.round(1080 * thumbScale);
+
   return (
     <aside className="w-56 shrink-0 bg-[#0f0f14] border-r border-white/5 flex flex-col overflow-hidden">
       {/* Header */}
@@ -41,13 +50,21 @@ export default function SlidePanel({
             </div>
 
             {/* Thumbnail */}
-            <div className="aspect-[16/9] bg-[#1a1a24] rounded-t-lg overflow-hidden">
+            <div
+              className="bg-[#1a1a24] rounded-t-lg overflow-hidden"
+              style={{ width: thumbW, height: thumbH }}
+            >
               {slide.html_url ? (
                 <iframe
                   src={`${slide.html_url}?t=${slide.cacheKey || ""}`}
                   title={`Slide ${idx + 1}`}
-                  className="w-full h-full border-0 pointer-events-none"
-                  style={{ transform: "scale(0.12)", transformOrigin: "top left", width: "833%", height: "833%" }}
+                  className="border-0 pointer-events-none"
+                  style={{
+                    width: 1920,
+                    height: 1080,
+                    transform: `scale(${thumbScale})`,
+                    transformOrigin: "top left",
+                  }}
                   loading="lazy"
                   sandbox="allow-same-origin"
                 />
