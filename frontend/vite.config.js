@@ -12,6 +12,7 @@ export default defineConfig({
       '/preview': 'http://localhost:8000',
       '/previews': 'http://localhost:8000',
       '/health': 'http://localhost:8000',
+      '/stream': 'http://localhost:8000',
       '/slides': 'http://localhost:8000',
       '/regenerate-slide': 'http://localhost:8000',
       '/restyle-slides': 'http://localhost:8000',

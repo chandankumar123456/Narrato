@@ -41,11 +41,13 @@ export default function App() {
                     <ProcessingPage
                       status={job.status}
                       progress={job.progress}
+                      stageLabel={job.stageLabel}
                       previewUrls={job.previewUrls}
                       error={job.error}
                       jobId={job.jobId}
                       resumeJob={job.resumeJob}
                       handleRetry={job.handleRetry}
+                      stream={job.stream}
                     />
                   }
                 />

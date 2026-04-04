@@ -1,12 +1,15 @@
 /**
  * Maps backend progress values to pipeline stage indicators.
- * Derived from orchestrator.py progress milestones.
+ *
+ * When SSE stageLabel is available it's shown directly.
+ * The STAGES thresholds act as a fallback for polling-only mode.
  */
 const STAGES = [
-  { label: "Understanding your prompt", threshold: 5 },
-  { label: "Building presentation structure", threshold: 35 },
-  { label: "Generating slide content", threshold: 60 },
-  { label: "Applying design and visuals", threshold: 85 },
+  { label: "Understanding your prompt", threshold: 5, stage: "init" },
+  { label: "Building narrative", threshold: 20, stage: "story" },
+  { label: "Generating slide content", threshold: 40, stage: "content_done" },
+  { label: "Designing and rendering", threshold: 70, stage: "visual_start" },
+  { label: "Finalizing presentation", threshold: 90, stage: "ppt" },
 ];
 
 function StageIcon({ state }) {
@@ -32,7 +35,10 @@ function StageIcon({ state }) {
   );
 }
 
-export default function ProgressPanel({ progress }) {
+export default function ProgressPanel({ progress, stageLabel, totalSlides }) {
+  // Use SSE label if available, otherwise derive from progress thresholds
+  const displayLabel = stageLabel || deriveLabel(progress);
+
   return (
     <div className="bg-surface-lowest rounded-xl p-8 shadow-ambient max-w-2xl mx-auto">
       {/* Header */}
@@ -41,14 +47,21 @@ export default function ProgressPanel({ progress }) {
           <h2 className="font-heading text-xl font-semibold text-on-surface">
             Generating your presentation...
           </h2>
-          <p className="text-sm text-on-surface-variant mt-0.5">
-            This usually takes 15–45 seconds
+          <p className="text-sm text-on-surface-variant mt-0.5 transition-all duration-300">
+            {displayLabel || "Starting..."}
           </p>
         </div>
-        <span className="text-2xl font-heading font-semibold text-on-surface">
+        <span className="text-2xl font-heading font-semibold text-on-surface tabular-nums">
           {progress}%
         </span>
       </div>
+
+      {/* Slide counter */}
+      {totalSlides > 0 && (
+        <p className="text-xs text-on-surface-dim mb-2">
+          {totalSlides} slides planned
+        </p>
+      )}
 
       {/* Progress Bar */}
       <div className="w-full bg-surface-high rounded-full h-2 mt-4 mb-6 overflow-hidden">
@@ -70,7 +83,7 @@ export default function ProgressPanel({ progress }) {
             <div key={stage.label} className="flex items-center gap-2">
               <StageIcon state={state} />
               <span
-                className={`text-sm ${
+                className={`text-sm transition-colors duration-200 ${
                   state === "done"
                     ? "text-success font-medium"
                     : state === "active"
@@ -86,4 +99,12 @@ export default function ProgressPanel({ progress }) {
       </div>
     </div>
   );
+}
+
+function deriveLabel(progress) {
+  if (progress < 5) return "Starting...";
+  for (let i = STAGES.length - 1; i >= 0; i--) {
+    if (progress >= STAGES[i].threshold) return STAGES[i].label;
+  }
+  return "Processing...";
 }
