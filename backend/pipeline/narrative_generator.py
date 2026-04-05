@@ -992,11 +992,17 @@ def _extract_labeled_value(content: str, label: str) -> str:
 
 
 def _build_slide_content(slide_type: str, title: str, content: str, key_points: list[str]) -> dict:
-    """Build slide content without extra LLM calls."""
+    """Build slide content without extra LLM calls.
+
+    Handles all slide types with safe access to key_points (never IndexError).
+    """
+    # Ensure key_points is always a non-empty list for safe access
+    safe_points = key_points if key_points else [title]
+
     if slide_type == "problem_slide":
         cards = [
             {"icon": "⚠", "label": _short_label(point, i, "Problem"), "description": point}
-            for i, point in enumerate(key_points)
+            for i, point in enumerate(safe_points)
         ]
         return {"title": title, "cards": cards}
 
@@ -1004,26 +1010,26 @@ def _build_slide_content(slide_type: str, title: str, content: str, key_points: 
         return {
             "title": title,
             "left_label": "Current Tools",
-            "left_points": key_points[:2],
+            "left_points": safe_points[:2],
             "right_label": "Observed Gaps",
-            "right_points": key_points[2:] + [_summary_line(content)],
+            "right_points": safe_points[2:] + [_summary_line(content)],
         }
 
     if slide_type == "stats_slide":
         return {
             "title": title,
-            "stat": key_points[0],
+            "stat": safe_points[0],
             "stat_label": _summary_line(content),
-            "description": " | ".join(key_points[1:]),
+            "description": " | ".join(safe_points[1:]),
             "source": _summary_line(content, fallback="Verified operating data"),
         }
 
     if slide_type == "conclusion_slide":
-        return {"title": title, "bullets": key_points, "key_takeaway": _summary_line(content)}
+        return {"title": title, "bullets": safe_points, "key_takeaway": _summary_line(content)}
 
     features = [
         {"icon": _get_icon(i), "label": _short_label(point, i, title), "description": point}
-        for i, point in enumerate(key_points)
+        for i, point in enumerate(safe_points)
     ]
     return {"title": title, "features": features, "summary": _summary_line(content)}
 

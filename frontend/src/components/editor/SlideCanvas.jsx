@@ -86,7 +86,7 @@ export default function SlideCanvas({
   return (
     <div className="flex-1 flex flex-col bg-[#0a0a0f] overflow-hidden">
       {/* Navigation Bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#0f0f14] border-b border-white/5">
+      <div className="flex items-center justify-between px-4 py-2 bg-[#0f0f14] border-b border-white/[0.06]">
         <div className="flex items-center gap-2">
           <button
             onClick={() => onNavigate(Math.max(0, slideIndex - 1))}

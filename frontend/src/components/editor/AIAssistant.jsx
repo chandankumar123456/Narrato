@@ -42,10 +42,10 @@ export default function AIAssistant({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 w-80 bg-[#0f0f14] border-l border-white/10
+    <div className="fixed inset-y-0 right-0 w-80 bg-[#0f0f14] border-l border-white/[0.06]
       shadow-2xl z-50 flex flex-col animate-slide-in-right">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-purple-500
             flex items-center justify-center">
@@ -53,7 +53,8 @@ export default function AIAssistant({
               <path d="M8 0l1.669 4.842L14.834 6l-4.166 3.158L12.165 14 8 10.842 3.835 14l1.497-4.842L1.166 6l5.165-1.158z"/>
             </svg>
           </div>
-          <h3 className="text-sm font-semibold text-white">AI Assistant</h3>
+          <h3 className="text-sm font-semibold text-white"
+              style={{ fontFamily: "'Manrope', sans-serif" }}>AI Assistant</h3>
         </div>
         <button
           onClick={onClose}

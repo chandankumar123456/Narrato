@@ -32,7 +32,7 @@ export default function EditorPage() {
   // If no slides loaded and not loading, show loading state
   if (editor.loading && editor.slides.length === 0) {
     return (
-      <div className="h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="h-screen bg-[#0a0a0f] flex items-center justify-center editor-surface">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           <p className="text-sm text-white/40">Loading slides...</p>
@@ -42,7 +42,7 @@ export default function EditorPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#0a0a0f] overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#0a0a0f] overflow-hidden editor-surface">
       {/* Editor Navbar */}
       <EditorNavbar
         onExport={() => setShowExport(true)}

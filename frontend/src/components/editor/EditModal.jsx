@@ -182,12 +182,13 @@ export default function EditModal({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative bg-[#12121a] rounded-2xl border border-white/10
+      <div className="relative bg-[#12121a] rounded-2xl border border-white/[0.06]
         shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col mx-4 animate-scale-in">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.06] shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-white">Edit Slide {slide.slide_id}</h2>
+            <h2 className="text-base font-semibold text-white"
+                style={{ fontFamily: "'Manrope', sans-serif" }}>Edit Slide {slide.slide_id}</h2>
             <p className="text-[10px] text-white/30 mt-0.5">{slide.type || "Content"}</p>
           </div>
           <button
@@ -207,7 +208,7 @@ export default function EditModal({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/5 shrink-0">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/[0.06] shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-lg bg-white/5 text-white/60 text-xs font-medium

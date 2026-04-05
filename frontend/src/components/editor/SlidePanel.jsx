@@ -20,10 +20,11 @@ export default function SlidePanel({
   const thumbH = Math.round(1080 * thumbScale);
 
   return (
-    <aside className="w-56 shrink-0 bg-[#0f0f14] border-r border-white/5 flex flex-col overflow-hidden">
+    <aside className="w-56 shrink-0 bg-[#0f0f14] border-r border-white/[0.06] flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-white/5">
-        <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">
+      <div className="px-4 py-3 border-b border-white/[0.06]">
+        <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider"
+            style={{ fontFamily: "'Manrope', sans-serif" }}>
           Slides
         </h3>
         <span className="text-[10px] text-white/30">{slides.length} slides</span>
@@ -66,7 +67,7 @@ export default function SlidePanel({
                     transformOrigin: "top left",
                   }}
                   loading="lazy"
-                  sandbox="allow-same-origin"
+                  sandbox="allow-same-origin allow-scripts"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">

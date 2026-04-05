@@ -37,10 +37,11 @@ export default function ControlPanel({
   }
 
   return (
-    <aside className="w-64 shrink-0 bg-[#0f0f14] border-l border-white/5 flex flex-col overflow-hidden">
+    <aside className="w-64 shrink-0 bg-[#0f0f14] border-l border-white/[0.06] flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-white/5">
-        <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider">
+      <div className="px-4 py-3 border-b border-white/[0.06]">
+        <h3 className="text-xs font-semibold text-white/50 uppercase tracking-wider"
+            style={{ fontFamily: "'Manrope', sans-serif" }}>
           Controls
         </h3>
       </div>
