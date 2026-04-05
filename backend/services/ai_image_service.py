@@ -112,22 +112,33 @@ def generate_ai_image(prompt: str, output_path: str) -> str:
 
     client = OpenAI(api_key=settings.openai_api_key)
 
-    response = client.responses.create(
-        model="gpt-4.1-mini",
-        input=prompt,
-        tools=[{"type": "image_generation"}],
+    # response = client.responses.create(
+    #     model="gpt-4.1-mini",
+    #     input=prompt,
+    #     tools=[{"type": "image_generation"}],
+    # )
+
+    # image_data = [
+    #     output.result
+    #     for output in response.output
+    #     if output.type == "image_generation_call"
+    # ]
+
+    # if not image_data:
+    #     raise AIImageError("AI image generation failed: No image returned")
+
+    # image_base64 = image_data[0]
+
+    response = client.images.generate(
+      model="gpt-image-1",
+      prompt=prompt,
+      size="1792x1024"  # matches your 16:9 requirement
     )
 
-    image_data = [
-        output.result
-        for output in response.output
-        if output.type == "image_generation_call"
-    ]
-
-    if not image_data:
+    if not response.data or not response.data[0].b64_json:
         raise AIImageError("AI image generation failed: No image returned")
-
-    image_base64 = image_data[0]
+    
+    image_base64 = response.data[0].b64_json
 
     with open(output_path, "wb") as f:
         f.write(base64.b64decode(image_base64))
