@@ -156,7 +156,13 @@ def select_layout(slide_data: dict) -> str:
 def _extract_items(content: dict) -> list[dict]:
     """Extract structured items from slide content.
 
-    Handles ALL known upstream content schemas:
+    Uses a two-phase approach:
+      Phase 1: Try known schema patterns (fast, precise).
+      Phase 2: Dynamic fallback — scan ALL content keys for any list/dict/string
+               values that can be interpreted as items. This ensures unknown or
+               new schemas are NEVER silently dropped.
+
+    Known schemas:
       - bullet_points / bullets / items / features / cards (list[str|dict])
       - steps / flow (list[dict] with step/text/label)
       - left_points / right_points (comparison)
@@ -166,6 +172,8 @@ def _extract_items(content: dict) -> list[dict]:
     """
     items: list[dict] = []
 
+    # ── Phase 1: Known schema patterns ──────────────────────────────
+
     # Try bullet_points / bullets / cards / features
     for key in ("bullet_points", "bullets", "items", "features", "cards"):
         raw = content.get(key)
@@ -174,20 +182,7 @@ def _extract_items(content: dict) -> list[dict]:
                 if isinstance(item, str):
                     items.append({"text": _truncate(item)})
                 elif isinstance(item, dict):
-                    normalized = {
-                        k: _truncate(str(v)) for k, v in item.items()
-                    }
-                    # Synthesize 'text' from label/description when missing
-                    if "text" not in normalized:
-                        label = normalized.get("label", "")
-                        desc = normalized.get("description", "")
-                        if label and desc:
-                            normalized["text"] = _truncate(f"{label}: {desc}", 30)
-                        elif desc:
-                            normalized["text"] = desc
-                        elif label:
-                            normalized["text"] = label
-                    items.append(normalized)
+                    items.append(_normalize_dict_item(item))
             return items
 
     # Try steps / flow (structured step lists)
@@ -233,7 +228,6 @@ def _extract_items(content: dict) -> list[dict]:
         stat_label = content.get("stat_label", "")
         description = content.get("description", "")
         items.append({"value": str(stat_val), "label": _truncate(str(stat_label or description))})
-        # Add remaining key points from description if distinct
         if description and description != stat_label:
             for part in str(description).split(" | ")[:MAX_ITEMS - 1]:
                 part = part.strip()
@@ -253,18 +247,91 @@ def _extract_items(content: dict) -> list[dict]:
                 })
         return items
 
-    # Fallback: extract body/description/cta_text/subtitle as single item
-    body = (
-        content.get("body")
-        or content.get("description")
-        or content.get("cta_text")
-        or content.get("subtitle")
-        or ""
-    )
-    if body:
-        items.append({"text": _truncate(str(body))})
+    # ── Phase 2: Dynamic fallback — scan ALL remaining content ──────
+    # This handles unknown schemas, nested dicts, or any new structure.
+    # Skip known scalar keys that will be handled by body fallback below.
+    _SCALAR_KEYS = {"title", "section_title", "presenter", "contact", "source",
+                    "image_url", "left_label", "right_label"}
+
+    # First: find ANY list values (unknown keys) and extract items
+    for key, val in content.items():
+        if key in _SCALAR_KEYS or key == "title":
+            continue
+        if isinstance(val, list) and val:
+            for item in val[:MAX_ITEMS]:
+                if isinstance(item, str):
+                    items.append({"text": _truncate(item)})
+                elif isinstance(item, dict):
+                    items.append(_normalize_dict_item(item))
+            if items:
+                return items
+
+    # Second: find ANY nested dict values and flatten them into text
+    for key, val in content.items():
+        if key in _SCALAR_KEYS or key == "title":
+            continue
+        if isinstance(val, dict) and val:
+            items.append({"text": _truncate(_flatten_dict_to_text(val))})
+            if items:
+                return items[:MAX_ITEMS]
+
+    # Final fallback: extract body/description/cta_text/subtitle/summary as single item
+    for key in ("body", "description", "cta_text", "subtitle", "summary"):
+        body = content.get(key)
+        if body and isinstance(body, str) and body.strip():
+            items.append({"text": _truncate(str(body))})
+            return items
+
+    # Last resort: extract ANY remaining non-empty string value
+    for key, val in content.items():
+        if key in _SCALAR_KEYS or key == "title":
+            continue
+        if isinstance(val, str) and val.strip():
+            items.append({"text": _truncate(val)})
+            if items:
+                return items[:MAX_ITEMS]
 
     return items
+
+
+def _normalize_dict_item(item: dict) -> dict:
+    """Normalize a dict item into a renderable structure with a 'text' key."""
+    normalized = {
+        k: _truncate(str(v)) for k, v in item.items()
+    }
+    # Synthesize 'text' from common label/description keys when missing
+    if "text" not in normalized:
+        label = normalized.get("label", "") or normalized.get("name", "")
+        desc = (normalized.get("description", "")
+                or normalized.get("desc", "")
+                or normalized.get("detail", "")
+                or normalized.get("summary", ""))
+        if label and desc:
+            normalized["text"] = _truncate(f"{label}: {desc}", 30)
+        elif desc:
+            normalized["text"] = desc
+        elif label:
+            normalized["text"] = label
+        else:
+            # Fallback: join first 2 non-empty string values
+            vals = [str(v) for v in item.values() if v and isinstance(v, (str, int, float))]
+            normalized["text"] = _truncate(" — ".join(vals[:2])) if vals else ""
+    return normalized
+
+
+def _flatten_dict_to_text(d: dict, max_depth: int = 2) -> str:
+    """Flatten a nested dict into a human-readable text string."""
+    parts: list[str] = []
+    for k, v in d.items():
+        if isinstance(v, str) and v.strip():
+            parts.append(f"{k}: {v}")
+        elif isinstance(v, (int, float)):
+            parts.append(f"{k}: {v}")
+        elif isinstance(v, dict) and max_depth > 0:
+            parts.append(_flatten_dict_to_text(v, max_depth - 1))
+        elif isinstance(v, list):
+            parts.append(f"{k}: {', '.join(str(i) for i in v[:3])}")
+    return " | ".join(parts[:4])
 
 
 def _truncate(text: str, max_words: int = MAX_BULLET_WORDS) -> str:
@@ -275,7 +342,12 @@ def _truncate(text: str, max_words: int = MAX_BULLET_WORDS) -> str:
 
 
 def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
-    """Convert slide content into structured UI components."""
+    """Convert slide content into structured UI components.
+
+    Preserves ALL content keys from the original slide content so that no
+    information is silently dropped.  Unknown fields are carried through
+    in an '_extra' dict for downstream access if needed.
+    """
     content = slide_data.get("content", {})
     title = content.get("title") or content.get("section_title") or ""
 
@@ -350,6 +422,12 @@ def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
             bullets = content.get("bullets") or content.get("key_points") or []
             if bullets:
                 subtitle = " · ".join(str(b) for b in bullets[:3])
+        # Final fallback: use extracted items as subtitle (for unknown schemas)
+        if not subtitle and items:
+            subtitle = " · ".join(
+                item.get("text", item.get("label", "")) for item in items[:3]
+                if item.get("text") or item.get("label")
+            )
         components["type"] = "hero"
         components["subtitle"] = _truncate(str(subtitle), 20)
         # Attach image_url if present (for AI-generated images)
@@ -357,6 +435,59 @@ def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
             components["image_url"] = content["image_url"]
 
     return components
+
+
+# ── Image decision logic ─────────────────────────────────────────────
+
+# Slide types where images are likely to IMPROVE understanding
+_IMAGE_BENEFICIAL_TYPES = frozenset({
+    "example_slide", "example_detail_slide", "image_slide",
+    "product", "feature_slide",
+})
+
+# Slide types where images are NOT helpful (abstract or text-only)
+_IMAGE_NOT_BENEFICIAL_TYPES = frozenset({
+    "title_slide", "cta_slide", "thank_you_slide", "agenda_slide",
+    "conclusion_slide", "stats_slide", "comparison_slide",
+    "section_header", "quote_slide",
+})
+
+
+def should_use_image(slide_data: dict) -> bool:
+    """Decide whether a slide should include an AI-generated image.
+
+    Rules:
+      1. Images are OPTIONAL — only when they improve understanding.
+      2. Abstract slides (stats, CTA, conclusion) → NO image.
+      3. Visual/example slides (product, feature) → YES if content is concrete.
+      4. Unknown types → NO (conservative default).
+
+    Args:
+        slide_data: Structured slide dict with {type, content}.
+
+    Returns:
+        True if an image should be generated for this slide.
+    """
+    slide_type = (slide_data.get("type") or "").lower()
+    content = slide_data.get("content", {})
+
+    # Explicit exclusion for abstract slides
+    if slide_type in _IMAGE_NOT_BENEFICIAL_TYPES:
+        return False
+
+    # Explicit inclusion for visual slides
+    if slide_type in _IMAGE_BENEFICIAL_TYPES:
+        return True
+
+    # For unknown types: check if content has visual indicators
+    title = str(content.get("title", "")).lower()
+    visual_keywords = {"demo", "example", "screenshot", "diagram", "visual",
+                       "illustration", "photo", "image", "workflow", "architecture"}
+    if any(kw in title for kw in visual_keywords):
+        return True
+
+    # Conservative default: no image for unknown slide types
+    return False
 
 
 def enforce_design_rules(components: dict) -> dict:

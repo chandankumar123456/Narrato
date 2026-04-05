@@ -308,22 +308,26 @@ class TestSlideContentValidation:
         result = validate_slide_content(slides)
         assert len(result) == 2
 
-    def test_empty_content_logged(self):
-        """Slides with empty content should be detected."""
+    def test_empty_content_raises(self):
+        """Slides with empty content must raise SlideValidationError."""
+        from pipeline.slide_validator import SlideValidationError
         slides = [
             {"slide_id": 1, "type": "title_slide", "content": {}},
         ]
-        # Should not raise, but log warning
-        result = validate_slide_content(slides)
-        assert len(result) == 1
+        with pytest.raises(SlideValidationError) as exc_info:
+            validate_slide_content(slides)
+        assert len(exc_info.value.violations) == 1
+        assert "empty" in exc_info.value.violations[0].lower()
 
-    def test_title_only_slide_logged(self):
-        """Slides with only a title but no other content should be detected."""
+    def test_title_only_slide_raises(self):
+        """Slides with only a title but no other content must raise SlideValidationError."""
+        from pipeline.slide_validator import SlideValidationError
         slides = [
             {"slide_id": 1, "type": "feature_slide", "content": {"title": "Features"}},
         ]
-        result = validate_slide_content(slides)
-        assert len(result) == 1
+        with pytest.raises(SlideValidationError) as exc_info:
+            validate_slide_content(slides)
+        assert len(exc_info.value.violations) == 1
 
 
 class TestDesignComponentValidation:
@@ -343,7 +347,8 @@ class TestDesignComponentValidation:
         result = validate_design_components(designs)
         assert len(result) == 1
 
-    def test_empty_items_detected(self):
+    def test_empty_items_raises(self):
+        from pipeline.slide_validator import SlideValidationError
         designs = [{
             "slide_index": 0,
             "layout": "grid_cards",
@@ -354,9 +359,9 @@ class TestDesignComponentValidation:
                 "items": [],
             },
         }]
-        # Should not raise but log warning
-        result = validate_design_components(designs)
-        assert len(result) == 1
+        with pytest.raises(SlideValidationError) as exc_info:
+            validate_design_components(designs)
+        assert len(exc_info.value.violations) == 1
 
     def test_hero_with_subtitle_passes(self):
         designs = [{

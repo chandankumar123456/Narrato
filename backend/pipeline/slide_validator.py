@@ -6,14 +6,26 @@ Validates EACH slide before rendering to enforce:
   3. Content matches expected schema for its layout
   4. No silently dropped fields
 
-If validation fails → logs a warning and attempts auto-repair.
-If auto-repair fails → raises ValueError with clear diagnostics.
+STRICT MODE: Raises SlideValidationError on any violation.
+No auto-repair. No silent continuation. Pipeline MUST stop on violations.
 """
 
 import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+class SlideValidationError(ValueError):
+    """Raised when slide content fails strict validation."""
+
+    def __init__(self, violations: list[str]):
+        self.violations = violations
+        msg = (
+            f"Slide validation failed with {len(violations)} violation(s):\n"
+            + "\n".join(f"  - {v}" for v in violations)
+        )
+        super().__init__(msg)
 
 
 # Minimum content checks per component type
@@ -30,16 +42,21 @@ _COMPONENT_CHECKS: dict[str, list[str]] = {
 def validate_slide_content(slides: list[dict]) -> list[dict]:
     """Validate structured slides have non-empty content.
 
+    STRICT: Raises SlideValidationError if ANY slide has:
+      - missing or empty content dict
+      - missing title
+      - no content fields beyond title
+
     Args:
         slides: List of structured slide dicts with {slide_id, type, content}.
 
     Returns:
-        The same list (potentially with auto-repaired content).
+        The same list (unmodified) if all slides pass validation.
 
     Raises:
-        ValueError: If a slide has empty content that cannot be repaired.
+        SlideValidationError: If any slide fails validation.
     """
-    errors: list[str] = []
+    violations: list[str] = []
 
     for slide in slides:
         slide_id = slide.get("slide_id", "?")
@@ -47,48 +64,47 @@ def validate_slide_content(slides: list[dict]) -> list[dict]:
         content = slide.get("content", {})
 
         if not isinstance(content, dict) or not content:
-            errors.append(
+            violations.append(
                 f"Slide {slide_id} ({slide_type}): content is empty or not a dict"
             )
             continue
 
         title = content.get("title", "")
         if not title:
-            errors.append(f"Slide {slide_id} ({slide_type}): missing title")
+            violations.append(f"Slide {slide_id} ({slide_type}): missing title")
 
         # Check that at least one content field beyond title is non-empty
         content_keys = {k for k, v in content.items() if k != "title" and _is_non_empty(v)}
         if not content_keys:
-            errors.append(
+            violations.append(
                 f"Slide {slide_id} ({slide_type}): has title but no content body — "
                 f"all fields besides title are empty. Keys: {list(content.keys())}"
             )
 
-    if errors:
-        for err in errors:
-            logger.warning("[slide_validator] %s", err)
-        # Log all errors but don't fail the pipeline — downstream handles gracefully
-        logger.warning(
-            "[slide_validator] %d validation issue(s) found across %d slides",
-            len(errors), len(slides),
-        )
+    if violations:
+        for v in violations:
+            logger.error("[slide_validator] VIOLATION: %s", v)
+        raise SlideValidationError(violations)
 
+    logger.info("[slide_validator] All %d slides passed strict validation", len(slides))
     return slides
 
 
 def validate_design_components(designs: list[dict]) -> list[dict]:
     """Validate design specs have non-empty components before template rendering.
 
+    STRICT: Raises SlideValidationError if any critical component is empty.
+
     Args:
         designs: List of design spec dicts from the design engine.
 
     Returns:
-        The same list (logged warnings for any issues).
+        The same list (unmodified) if all designs pass validation.
 
     Raises:
-        ValueError: If a critical component is empty and can't be rendered.
+        SlideValidationError: If a critical component is empty.
     """
-    issues: list[str] = []
+    violations: list[str] = []
 
     for design in designs:
         idx = design.get("slide_index", "?")
@@ -98,7 +114,7 @@ def validate_design_components(designs: list[dict]) -> list[dict]:
 
         title = components.get("title", "")
         if not title:
-            issues.append(f"Design {idx} ({layout}): empty title")
+            violations.append(f"Design {idx} ({layout}): empty title")
 
         # Check component-type-specific required fields
         checks = _COMPONENT_CHECKS.get(comp_type, [])
@@ -121,14 +137,16 @@ def validate_design_components(designs: list[dict]) -> list[dict]:
             has_content = bool(body and body.strip()) or bool(items)
 
         if checks and not has_content:
-            issues.append(
+            violations.append(
                 f"Design {idx} ({layout}, type={comp_type}): no content in required fields {checks}"
             )
 
-    if issues:
-        for issue in issues:
-            logger.warning("[slide_validator] %s", issue)
+    if violations:
+        for v in violations:
+            logger.error("[slide_validator] DESIGN VIOLATION: %s", v)
+        raise SlideValidationError(violations)
 
+    logger.info("[slide_validator] All %d designs passed strict validation", len(designs))
     return designs
 
 
