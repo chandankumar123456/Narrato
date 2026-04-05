@@ -6,7 +6,7 @@ STRICT: Raises on failure — no fallbacks, no placeholders, no stock images.
 Pipeline:
   1. should_use_image(slide) → decides if image is needed
   2. generate_image_prompt(slide) → creates detailed visual prompt
-  3. generate_image(prompt) → calls OpenAI Images API → returns local file path
+  3. generate_ai_image(prompt, output_path) → calls OpenAI responses API → returns file:// URI
 
 HARD RULE: If image generation fails → pipeline MUST fail.
 """
@@ -15,6 +15,7 @@ import logging
 import os
 import uuid
 import base64
+from pathlib import Path
 
 from config import settings
 
@@ -80,8 +81,63 @@ async def generate_image_prompt(slide_data: dict) -> str:
     return " ".join(prompt_parts)
 
 
+def generate_ai_image(prompt: str, output_path: str) -> str:
+    """Generate an image using OpenAI responses API with image_generation tool.
+
+    STRICT: Raises on any failure — no fallbacks.
+
+    Args:
+        prompt: Detailed image description.
+        output_path: Full file path to save the generated image.
+
+    Returns:
+        file:// URI of the saved image.
+
+    Raises:
+        AIImageError: If API key missing, generation fails, or no image returned.
+    """
+    if not settings.openai_api_key:
+        raise AIImageError(
+            "OpenAI API key not configured — cannot generate images. "
+            "Set OPENAI_API_KEY in .env"
+        )
+
+    try:
+        from openai import OpenAI  # type: ignore
+    except ImportError:
+        raise AIImageError(
+            "openai package not installed — cannot generate images. "
+            "Install with: pip install openai"
+        )
+
+    client = OpenAI(api_key=settings.openai_api_key)
+
+    response = client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt,
+        tools=[{"type": "image_generation"}],
+    )
+
+    image_data = [
+        output.result
+        for output in response.output
+        if output.type == "image_generation_call"
+    ]
+
+    if not image_data:
+        raise AIImageError("AI image generation failed: No image returned")
+
+    image_base64 = image_data[0]
+
+    with open(output_path, "wb") as f:
+        f.write(base64.b64decode(image_base64))
+
+    logger.info("[ai_image] Generated image: %s", output_path)
+    return Path(output_path).absolute().as_uri()
+
+
 async def generate_image(prompt: str, output_dir: str | None = None) -> str:
-    """Generate an image using OpenAI Images API.
+    """Generate an image using OpenAI responses API (async wrapper).
 
     STRICT: Raises AIImageError on any failure — no fallbacks.
 
@@ -90,63 +146,21 @@ async def generate_image(prompt: str, output_dir: str | None = None) -> str:
         output_dir: Directory to save the image. Defaults to settings.output_dir.
 
     Returns:
-        Local file path of the generated image.
+        file:// URI of the saved image.
 
     Raises:
-        AIImageError: If API key missing, generation fails, or download fails.
+        AIImageError: If API key missing, generation fails, or no image returned.
     """
-    if not settings.openai_api_key:
-        raise AIImageError(
-            "OpenAI API key not configured — cannot generate images. "
-            "Set OPENAI_API_KEY in .env"
-        )
+    import asyncio
 
     save_dir = output_dir or settings.output_dir
     os.makedirs(save_dir, exist_ok=True)
 
-    try:
-        from openai import AsyncOpenAI  # type: ignore
-    except ImportError:
-        raise AIImageError(
-            "openai package not installed — cannot generate images. "
-            "Install with: pip install openai"
-        )
+    file_name = f"ai_{uuid.uuid4().hex}.png"
+    output_path = os.path.join(save_dir, file_name)
 
     try:
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
-
-        response = await client.images.generate(
-            model="gpt-image-1",
-            prompt=prompt,
-            size="1024x1024",
-            n=1,
-        )
-
-        # gpt-image-1 returns base64-encoded image data by default
-        image_data = response.data[0]
-
-        file_name = f"ai_{uuid.uuid4().hex}.png"
-        file_path = os.path.join(save_dir, file_name)
-
-        if hasattr(image_data, "b64_json") and image_data.b64_json:
-            # Decode base64 image data
-            image_bytes = base64.b64decode(image_data.b64_json)
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-        elif hasattr(image_data, "url") and image_data.url:
-            # Download from URL
-            import httpx
-            async with httpx.AsyncClient(timeout=30) as http_client:
-                r = await http_client.get(image_data.url)
-                r.raise_for_status()
-                with open(file_path, "wb") as f:
-                    f.write(r.content)
-        else:
-            raise AIImageError("OpenAI returned neither base64 data nor URL")
-
-        logger.info("[ai_image] Generated image: %s", file_path)
-        return file_path
-
+        return await asyncio.to_thread(generate_ai_image, prompt, output_path)
     except AIImageError:
         raise
     except Exception as exc:
@@ -154,7 +168,7 @@ async def generate_image(prompt: str, output_dir: str | None = None) -> str:
 
 
 async def generate_image_for_slide(slide_data: dict, output_dir: str | None = None) -> str | None:
-    """Full pipeline: decide → prompt → generate → return path.
+    """Full pipeline: decide → prompt → generate → return file:// URI.
 
     STRICT: Raises AIImageError if image is needed but generation fails.
 
@@ -163,7 +177,7 @@ async def generate_image_for_slide(slide_data: dict, output_dir: str | None = No
         output_dir: Directory to save generated images.
 
     Returns:
-        Local file path of the generated image, or None if image
+        file:// URI of the generated image, or None if image
         is not needed for this slide type (advisory decision).
 
     Raises:
