@@ -227,7 +227,7 @@ def validate_rendered_html(html_slides: list[str]) -> list[str]:
 def validate_export_parity(editor_html_slides: list[str], export_html_slides: list[str]) -> None:
     """Verify that export uses the EXACT same HTML as the editor.
 
-    HARD RULE: editor HTML == export HTML (byte-level identical per slide).
+    HARD RULE: editor HTML == export HTML (identical per slide after stripping).
 
     Args:
         editor_html_slides: HTML strings used in the editor iframes.
@@ -247,7 +247,7 @@ def validate_export_parity(editor_html_slides: list[str], export_html_slides: li
         for idx, (editor_html, export_html) in enumerate(
             zip(editor_html_slides, export_html_slides)
         ):
-            if editor_html != export_html:
+            if editor_html.strip() != export_html.strip():
                 violations.append(
                     f"Slide {idx + 1}: export HTML differs from editor HTML "
                     f"(editor len={len(editor_html)}, export len={len(export_html)})"

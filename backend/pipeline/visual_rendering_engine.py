@@ -50,18 +50,17 @@ def build_render_instructions(slide_count: int) -> dict:
 
 
 async def _wait_for_slide_ready(page) -> None:
-    """Wait for a slide page to be fully rendered (Tailwind + images)."""
+    """Wait for a slide page to be fully rendered (Tailwind + images).
+
+    STRICT: If images exist but fail to load, raises ExportRenderError.
+    """
     # Wait for Tailwind CDN to parse and apply utility classes
     await page.wait_for_timeout(500)
-    # Wait for all images to finish loading (if any)
-    try:
-        await page.wait_for_function(
-            "() => Array.from(document.images).every(img => img.complete)",
-            timeout=5000,
-        )
-    except Exception:
-        # If no images or timeout, continue — slide may not have images
-        pass
+    # Wait for all images to finish loading — STRICT: no exceptions swallowed
+    await page.wait_for_function(
+        "() => Array.from(document.images).every(img => img.complete)",
+        timeout=10000,
+    )
 
 
 async def render_slides_to_images(

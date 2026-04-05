@@ -169,17 +169,17 @@ def _render_split(components: dict, theme: dict) -> str:
             )
     bullets_html = "\n".join(bullet_parts)
 
-    # Right panel: AI image or visual placeholder
+    # Right panel: AI-generated image (required when layout is split)
     if image_url:
         right_panel = f"""\
     <div class="{card_bg} {card_border} {card_shadow} rounded-3xl w-full aspect-[4/3] overflow-hidden">
       <img src="{_esc(image_url)}" alt="{title}" class="w-full h-full object-cover" />
     </div>"""
     else:
+        # No placeholder — if split layout has no image, render empty styled panel
         right_panel = f"""\
     <div class="{card_bg} {card_border} {card_shadow} rounded-3xl w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden">
       <div class="absolute inset-0 {accent_line} opacity-[0.03]"></div>
-      <span class="{text_muted} text-base tracking-widest uppercase font-medium">Visual</span>
     </div>"""
 
     return f"""\
