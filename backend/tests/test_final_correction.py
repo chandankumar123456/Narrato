@@ -218,6 +218,15 @@ class TestImageWaitStrict:
             "image load failures must propagate"
         )
 
+    def test_wait_checks_natural_height(self):
+        """_wait_for_slide_ready must check naturalHeight > 0 to verify image loaded."""
+        from pipeline.visual_rendering_engine import _wait_for_slide_ready
+        source = inspect.getsource(_wait_for_slide_ready)
+        assert "naturalHeight" in source, (
+            "_wait_for_slide_ready does not check naturalHeight — "
+            "must verify images loaded successfully, not just completed"
+        )
+
 
 # ══════════════════════════════════════════════════════════════════════
 # ISSUE 5: No placeholder "Visual" text in templates

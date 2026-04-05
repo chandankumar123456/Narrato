@@ -53,12 +53,14 @@ async def _wait_for_slide_ready(page) -> None:
     """Wait for a slide page to be fully rendered (Tailwind + images).
 
     STRICT: If images exist but fail to load, raises ExportRenderError.
+    Checks both complete AND naturalHeight > 0 to ensure images loaded successfully.
     """
     # Wait for Tailwind CDN to parse and apply utility classes
     await page.wait_for_timeout(500)
-    # Wait for all images to finish loading — STRICT: no exceptions swallowed
+    # Wait for all images to finish loading AND verify they loaded successfully
+    # complete=true + naturalHeight=0 means image failed to load
     await page.wait_for_function(
-        "() => Array.from(document.images).every(img => img.complete)",
+        "() => Array.from(document.images).every(img => img.complete && img.naturalHeight > 0)",
         timeout=10000,
     )
 

@@ -153,7 +153,7 @@ async def generate_image(prompt: str, output_dir: str | None = None) -> str:
         raise AIImageError(f"AI image generation failed: {exc}") from exc
 
 
-async def generate_image_for_slide(slide_data: dict, output_dir: str | None = None) -> str:
+async def generate_image_for_slide(slide_data: dict, output_dir: str | None = None) -> str | None:
     """Full pipeline: decide → prompt → generate → return path.
 
     STRICT: Raises AIImageError if image is needed but generation fails.
@@ -163,7 +163,8 @@ async def generate_image_for_slide(slide_data: dict, output_dir: str | None = No
         output_dir: Directory to save generated images.
 
     Returns:
-        Local file path of the generated image.
+        Local file path of the generated image, or None if image
+        is not needed for this slide type (advisory decision).
 
     Raises:
         AIImageError: If image generation fails for a slide that requires it.
@@ -171,6 +172,7 @@ async def generate_image_for_slide(slide_data: dict, output_dir: str | None = No
     from pipeline.visual_design_engine import should_use_image
 
     if not should_use_image(slide_data):
+        # Image not needed for this slide type — advisory decision
         return None
 
     prompt = await generate_image_prompt(slide_data)

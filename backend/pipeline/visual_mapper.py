@@ -49,6 +49,9 @@ async def generate_visual_queries(state: PresentationState) -> PresentationState
 
     # Attach image paths to slides — CRITICAL: store as content.image_url
     # so the design engine can find them (it reads content.get("image_url"))
+    assert len(image_paths) == len(slides_needing_images), (
+        f"Image path count ({len(image_paths)}) != slide count ({len(slides_needing_images)})"
+    )
     query_idx = 0
     updated_slides = []
     for slide in state.structured_slides:
