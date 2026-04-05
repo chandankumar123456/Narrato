@@ -195,11 +195,8 @@ async def run_pipeline(prompt: str, options: dict = {},
               total_slides=total_slides)
 
     # ── Shared tail (both paths) ──────────────────────────────────
-    # Visual queries (image fetching)
-    try:
-        state = await generate_visual_queries(state)
-    except Exception as exc:
-        logger.warning("[pipeline] Visual queries failed, continuing: %s", exc)
+    # Visual queries (image fetching) — STRICT: failures stop the pipeline
+    state = await generate_visual_queries(state)
 
     completed_steps += 1
     _emit(EventType.STAGE_UPDATE, "visual_queries", "Preparing visual elements…",
@@ -262,9 +259,9 @@ async def run_pipeline(prompt: str, options: dict = {},
 
     # ── Enforce image requirements — if should_use_image() says yes, image MUST exist ──
     for idx, slide in enumerate(slides):
-        if should_use_image(slide) and not slide.get("content", {}).get("image_url") and not slide.get("image_path"):
-            raise SlideRenderError(
-                [f"Slide {idx + 1} ({slide.get('type', '?')}): image required but missing"]
+        if should_use_image(slide) and not slide.get("content", {}).get("image_url"):
+            raise RuntimeError(
+                f"Image required but missing for slide {idx + 1} ({slide.get('type', '?')})"
             )
 
     # ── Validate export parity — ensures same HTML goes to export as editor ──
