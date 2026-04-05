@@ -51,14 +51,14 @@ export default function ExportModal({ isOpen, onClose, jobId, slideCount }) {
       />
 
       {/* Modal */}
-      <div className="relative bg-[#12121a] rounded-2xl border border-white/[0.06]
-        shadow-2xl w-full max-w-md p-6 mx-4 animate-scale-in">
+      <div className="relative rounded-2xl border shadow-2xl w-full max-w-md p-6 mx-4 animate-scale-in"
+           style={{ backgroundColor: 'var(--editor-surface-raised)', borderColor: 'var(--editor-border)' }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-lg font-semibold text-white"
-                style={{ fontFamily: "'Manrope', sans-serif" }}>Export Presentation</h2>
-            <p className="text-xs text-white/40 mt-0.5">
+            <h2 className="text-lg font-semibold"
+                style={{ fontFamily: 'var(--font-heading)', color: 'var(--editor-text)' }}>Export Presentation</h2>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--editor-text-muted)' }}>
               {slideCount} slides ready for export
             </p>
           </div>
