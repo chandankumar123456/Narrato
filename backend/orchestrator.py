@@ -262,7 +262,7 @@ async def run_pipeline(prompt: str, options: dict = {},
 
     # ── Enforce image requirements — if should_use_image() says yes, image MUST exist ──
     for idx, slide in enumerate(slides):
-        if should_use_image(slide) and not slide.get("content", {}).get("image_url"):
+        if should_use_image(slide) and not slide.get("content", {}).get("image_url") and not slide.get("image_path"):
             raise SlideRenderError(
                 [f"Slide {idx + 1} ({slide.get('type', '?')}): image required but missing"]
             )

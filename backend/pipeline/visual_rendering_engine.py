@@ -76,7 +76,7 @@ async def _wait_for_slide_ready(page) -> None:
     # Wait for all images to finish loading AND verify they loaded successfully
     # complete=true + naturalHeight=0 means image failed to load
     await page.wait_for_function(
-        "() => Array.from(document.images).every(img => img.complete && img.naturalHeight > 0)",
+        "() => document.images.length === 0 || Array.from(document.images).every(img => img.complete && img.naturalHeight > 0)",
         timeout=10000,
     )
 

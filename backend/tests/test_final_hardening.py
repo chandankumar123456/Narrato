@@ -232,8 +232,7 @@ class TestNoPartialExport:
     def test_rendering_engine_no_per_slide_try_except(self):
         """render_slides_to_images must NOT have per-slide try/except."""
         source = inspect.getsource(render_slides_to_images)
-        # Should NOT have try/except around the per-slide rendering loop
-        assert source.count("except") == 0 or source.count("except ImportError") == 0, (
+        assert "except" not in source, (
             "render_slides_to_images still has try/except — must be all-or-nothing"
         )
 
