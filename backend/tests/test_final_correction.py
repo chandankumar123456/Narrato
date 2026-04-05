@@ -167,11 +167,18 @@ class TestAIImageServiceStrict:
         """AIImageError must be defined."""
         assert issubclass(AIImageError, RuntimeError)
 
-    def test_generate_image_uses_gpt_image_1(self):
-        """generate_image must use gpt-image-1 model."""
-        source = inspect.getsource(generate_image)
-        assert "gpt-image-1" in source, (
-            "generate_image does not use gpt-image-1 model"
+    def test_generate_image_uses_gpt_4_1_mini(self):
+        """generate_ai_image must use gpt-4.1-mini model with responses API."""
+        from services.ai_image_service import generate_ai_image
+        source = inspect.getsource(generate_ai_image)
+        assert "gpt-4.1-mini" in source, (
+            "generate_ai_image does not use gpt-4.1-mini model"
+        )
+        assert "responses.create" in source, (
+            "generate_ai_image does not use responses.create API"
+        )
+        assert "image_generation" in source, (
+            "generate_ai_image does not use image_generation tool"
         )
 
     def test_generate_image_no_none_return(self):
