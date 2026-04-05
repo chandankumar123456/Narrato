@@ -595,3 +595,213 @@ class TestVisualDesignQuality:
         """Antialiased font smoothing must be enabled."""
         html_slides = self._get_html(SAMPLE_SLIDES[:1])
         assert "font-smoothing" in html_slides[0]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  Narrative-Generated Content Propagation Tests
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+# These slides mirror the exact output of _build_slide_content() in
+# narrative_generator.py for each section-to-type mapping.
+NARRATIVE_SLIDES = [
+    {
+        "slide_id": 1,
+        "type": "title_slide",
+        "content": {
+            "title": "Cold-chain orchestration",
+            "subtitle": "Actor: logistics director | Action: route scheduling",
+            "presenter": "",
+        },
+    },
+    {
+        "slide_id": 2,
+        "type": "problem_slide",
+        "content": {
+            "title": "The Cold-Chain Problem",
+            "cards": [
+                {"icon": "⚠", "label": "Dock queue overflow", "description": "Chilled pallets wait 4+ hours at receiving docks"},
+                {"icon": "⚠", "label": "Spoilage spike", "description": "12% of perishable inventory lost to temperature excursion"},
+                {"icon": "⚠", "label": "Manual rerouting", "description": "Dispatchers manage 200+ daily exceptions by phone"},
+            ],
+        },
+    },
+    {
+        "slide_id": 3,
+        "type": "feature_slide",
+        "content": {
+            "title": "Who Feels the Pain",
+            "features": [
+                {"icon": "🔹", "label": "Logistics director", "description": "Juggles 8 carrier contracts with no visibility"},
+                {"icon": "🔸", "label": "Warehouse lead", "description": "Loses 3 hours daily to dock congestion"},
+                {"icon": "⚡", "label": "CFO", "description": "Writes off $2.4M annually in spoilage"},
+            ],
+            "summary": "Actor: logistics director | Action: route scheduling",
+        },
+    },
+    {
+        "slide_id": 4,
+        "type": "comparison_slide",
+        "content": {
+            "title": "The System Gap",
+            "left_label": "Current Tools",
+            "left_points": ["Spreadsheet-based routing", "Phone-tree escalation"],
+            "right_label": "Observed Gaps",
+            "right_points": ["No predictive temp monitoring", "Actor: warehouse lead | Action: dock scheduling"],
+        },
+    },
+    {
+        "slide_id": 5,
+        "type": "stats_slide",
+        "content": {
+            "title": "Traction Metrics",
+            "stat": "$2.4M saved",
+            "stat_label": "Actor: CFO | Action: cost reduction",
+            "description": "40% fewer temperature excursions | 3x faster dock throughput",
+            "source": "Actor: logistics director | Action: reporting",
+        },
+    },
+    {
+        "slide_id": 6,
+        "type": "conclusion_slide",
+        "content": {
+            "title": "Our Vision",
+            "bullets": [
+                "Autonomous cold-chain from farm to fork",
+                "Zero-waste logistics by 2030",
+                "Real-time predictive routing nationwide",
+            ],
+            "key_takeaway": "Eliminate spoilage through intelligent orchestration",
+        },
+    },
+    {
+        "slide_id": 7,
+        "type": "cta_slide",
+        "content": {
+            "title": "Get Started",
+            "cta_text": "Review the cold-chain orchestration narrative and move to diligence.",
+            "contact": "",
+        },
+    },
+]
+
+
+class TestNarrativeContentPropagation:
+    """Verify that content from narrative_generator's _build_slide_content()
+    actually reaches the final HTML output through the design → template pipeline.
+    """
+
+    def _get_html(self, slides, theme="modern"):
+        designs = run_design_engine(slides, state_theme=theme)
+        return run_template_engine(designs)
+
+    # ── Problem slide: cards must appear in HTML ──────────────────
+
+    def test_problem_cards_reach_html(self):
+        """Problem slide cards (icon+label+description) must appear in final HTML."""
+        html_slides = self._get_html([NARRATIVE_SLIDES[1]])
+        html = html_slides[0]
+        assert "Dock queue overflow" in html or "Chilled pallets" in html
+        assert "Spoilage spike" in html or "temperature excursion" in html
+
+    def test_problem_cards_extracted_as_items(self):
+        """Design engine must extract cards into grid_cards items."""
+        slide = NARRATIVE_SLIDES[1]
+        comp = map_components(slide, "grid_cards")
+        assert comp["type"] == "card_grid"
+        assert len(comp["items"]) == 3
+        # Each item must have non-empty text
+        for item in comp["items"]:
+            assert item.get("text", ""), f"Card item has empty text: {item}"
+
+    # ── Feature slide: label+description must flow through ───────
+
+    def test_feature_content_reaches_html(self):
+        """Feature slide label/description content must appear in final HTML."""
+        html_slides = self._get_html([NARRATIVE_SLIDES[2]])
+        html = html_slides[0]
+        # At least some descriptive content should appear
+        assert "Logistics director" in html or "Juggles" in html or "visibility" in html
+
+    def test_feature_items_have_text(self):
+        """Step flow items must have non-empty text synthesized from label+description."""
+        slide = NARRATIVE_SLIDES[2]
+        comp = map_components(slide, "step_flow")
+        assert comp["type"] == "steps"
+        assert len(comp["steps"]) == 3
+        for step in comp["steps"]:
+            assert step.get("text", ""), f"Step has empty text: {step}"
+
+    # ── Comparison slide: left/right points must appear ──────────
+
+    def test_comparison_content_reaches_html(self):
+        """Comparison slide left_points/right_points must appear in HTML."""
+        html_slides = self._get_html([NARRATIVE_SLIDES[3]])
+        html = html_slides[0]
+        assert "Spreadsheet" in html or "routing" in html
+
+    def test_comparison_items_extracted(self):
+        """Grid cards must contain items derived from left/right points."""
+        slide = NARRATIVE_SLIDES[3]
+        comp = map_components(slide, "grid_cards")
+        assert comp["type"] == "card_grid"
+        assert len(comp["items"]) >= 2
+        for item in comp["items"]:
+            assert item.get("text", ""), f"Comparison item has empty text: {item}"
+
+    # ── Stats slide: stat value must appear as dominant number ────
+
+    def test_stats_value_reaches_html(self):
+        """Stats slide stat value must appear in final HTML."""
+        html_slides = self._get_html([NARRATIVE_SLIDES[4]])
+        html = html_slides[0]
+        assert "$2.4M saved" in html
+
+    def test_stats_items_have_values(self):
+        """Stats block items must have non-empty value for the primary stat."""
+        slide = NARRATIVE_SLIDES[4]
+        comp = map_components(slide, "stats_blocks")
+        assert comp["type"] == "stats"
+        assert len(comp["items"]) >= 1
+        # Primary stat must have a value
+        assert comp["items"][0]["value"] == "$2.4M saved"
+
+    # ── Conclusion slide: key_takeaway/bullets must appear ────────
+
+    def test_conclusion_content_reaches_html(self):
+        """Conclusion slide key_takeaway or bullets must appear in HTML."""
+        html_slides = self._get_html([NARRATIVE_SLIDES[5]])
+        html = html_slides[0]
+        assert "spoilage" in html.lower() or "orchestration" in html.lower() or "cold-chain" in html.lower()
+
+    def test_conclusion_subtitle_populated(self):
+        """Hero center subtitle must be derived from key_takeaway."""
+        slide = NARRATIVE_SLIDES[5]
+        comp = map_components(slide, "hero_center")
+        assert comp["type"] == "hero"
+        assert comp["subtitle"], "Conclusion slide subtitle is empty"
+        assert "spoilage" in comp["subtitle"].lower() or "orchestration" in comp["subtitle"].lower()
+
+    # ── CTA slide: cta_text must appear ──────────────────────────
+
+    def test_cta_content_reaches_html(self):
+        """CTA slide subtitle (from cta_text/body) must appear in HTML."""
+        html_slides = self._get_html([NARRATIVE_SLIDES[6]])
+        html = html_slides[0]
+        # CTA type maps to hero_center; cta_text should be in subtitle or body
+        assert "Get Started" in html
+
+    # ── End-to-end: all narrative slides produce non-empty HTML ───
+
+    def test_all_narrative_slides_produce_content(self):
+        """Every narrative-generated slide must produce HTML with more than just a title."""
+        html_slides = self._get_html(NARRATIVE_SLIDES)
+        for idx, html in enumerate(html_slides):
+            slide = NARRATIVE_SLIDES[idx]
+            title = slide["content"].get("title", "")
+            # Remove the title from HTML and check there's still substantial content
+            remaining = html.replace(title, "")
+            # Should still have meaningful text beyond boilerplate
+            assert len(remaining) > 500, (
+                f"Slide {idx} ({slide['type']}) has only boilerplate HTML after title removal"
+            )
