@@ -1,12 +1,11 @@
 from models.presentation_state import PresentationState
 from services.ai_image_service import generate_image_for_slide
+from pipeline.visual_design_engine import should_use_image
 import asyncio
 import logging
 import os
 
 logger = logging.getLogger(__name__)
-
-NO_IMAGE_TYPES = {"title_slide", "section_header", "stats_slide", "cta_slide"}
 
 
 class ImageGenerationError(RuntimeError):
@@ -17,7 +16,7 @@ class ImageGenerationError(RuntimeError):
 async def generate_visual_queries(state: PresentationState) -> PresentationState:
     slides_needing_images = [
         s for s in state.structured_slides
-        if s["type"] not in NO_IMAGE_TYPES and state.image_preference
+        if should_use_image(s) and state.image_preference
     ]
 
     if not slides_needing_images:
@@ -55,7 +54,7 @@ async def generate_visual_queries(state: PresentationState) -> PresentationState
     query_idx = 0
     updated_slides = []
     for slide in state.structured_slides:
-        if slide["type"] not in NO_IMAGE_TYPES and state.image_preference:
+        if should_use_image(slide) and state.image_preference:
             image_url = image_urls[query_idx] if query_idx < len(image_urls) else None
             updated_slide = {**slide}
             if image_url:
