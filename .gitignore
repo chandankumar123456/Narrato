@@ -374,3 +374,4 @@ vite.config.ts.timestamp-*
 .vite/
 
 /backend/outputs/
+clean_env/
