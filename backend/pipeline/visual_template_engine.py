@@ -144,7 +144,12 @@ def _render_grid_cards(components: dict, theme: dict) -> str:
 
 
 def _render_split(components: dict, theme: dict) -> str:
-    """Split layout — left text dominance with right visual placeholder or image."""
+    """Split layout — left text dominance with right visual image.
+
+    STRICT: image_url is REQUIRED for split layouts. No empty panels.
+    """
+    from pipeline.slide_validator import SlideRenderError
+
     title = _esc(components.get("title", ""))
     body = _esc(components.get("body", ""))
     accent = theme["accent"]
@@ -169,17 +174,15 @@ def _render_split(components: dict, theme: dict) -> str:
             )
     bullets_html = "\n".join(bullet_parts)
 
-    # Right panel: AI-generated image (required when layout is split)
-    if image_url:
-        right_panel = f"""\
+    # STRICT: Split layout requires an image — no empty panel allowed
+    if not image_url:
+        raise SlideRenderError(
+            [f"Split layout requires image_url but none provided (title: {title})"]
+        )
+
+    right_panel = f"""\
     <div class="{card_bg} {card_border} {card_shadow} rounded-3xl w-full aspect-[4/3] overflow-hidden">
       <img src="{_esc(image_url)}" alt="{title}" class="w-full h-full object-cover" />
-    </div>"""
-    else:
-        # No placeholder — if split layout has no image, render empty styled panel
-        right_panel = f"""\
-    <div class="{card_bg} {card_border} {card_shadow} rounded-3xl w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden">
-      <div class="absolute inset-0 {accent_line} opacity-[0.03]"></div>
     </div>"""
 
     return f"""\

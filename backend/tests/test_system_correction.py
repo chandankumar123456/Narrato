@@ -60,6 +60,7 @@ SPLIT_SLIDE = {
         "title": "Case Study: Hospital A",
         "body": "Hospital A reduced readmission rates by 40% using predictive analytics.",
         "bullets": ["Real-time monitoring", "Early intervention alerts"],
+        "image_url": "file:///tmp/test_hospital.png",
     },
 }
 

@@ -58,6 +58,7 @@ SPLIT_SLIDE = {
         "title": "Case Study: Hospital A",
         "body": "Hospital A reduced readmission rates by 40%.",
         "bullets": ["Real-time monitoring", "Early intervention alerts"],
+        "image_url": "file:///tmp/test_hospital.png",
     },
 }
 
@@ -243,8 +244,9 @@ class TestNoPlaceholderVisual:
             "Split template still contains 'Visual' placeholder text — must be removed"
         )
 
-    def test_split_without_image_no_visual_text(self):
-        """Split slide without image should NOT have 'Visual' text in HTML."""
+    def test_split_without_image_raises_error(self):
+        """Split slide without image_url must raise SlideRenderError."""
+        from pipeline.slide_validator import SlideRenderError
         slide = {
             "slide_id": 1,
             "type": "example_slide",
@@ -255,10 +257,8 @@ class TestNoPlaceholderVisual:
             },
         }
         designs = run_design_engine([slide])
-        html_slides = run_template_engine(designs)
-        assert ">Visual<" not in html_slides[0], (
-            "Split slide without image still shows 'Visual' placeholder"
-        )
+        with pytest.raises(SlideRenderError, match="Split layout requires image_url"):
+            run_template_engine(designs)
 
 
 # ══════════════════════════════════════════════════════════════════════

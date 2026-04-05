@@ -26,7 +26,8 @@ from pipeline.visual_design_engine import run_design_engine
 from pipeline.visual_template_engine import run_template_engine
 from pipeline.visual_rendering_engine import render_slides_to_images, render_slides_to_pdf, build_render_instructions
 from pipeline.visual_export_engine import run_export_engine
-from pipeline.slide_validator import validate_slide_content, validate_design_components, validate_rendered_html, validate_export_parity
+from pipeline.slide_validator import validate_slide_content, validate_design_components, validate_rendered_html, validate_export_parity, SlideRenderError
+from pipeline.visual_design_engine import should_use_image
 from services.event_system import PipelineEvent, EventType
 import logging
 import os
@@ -259,13 +260,21 @@ async def run_pipeline(prompt: str, options: dict = {},
     # ── Validate rendered HTML — STRICT: stops pipeline if any slide is title-only ──
     validate_rendered_html(all_html_slides)
 
-    # ── Validate export parity — ensures same HTML goes to export as editor ──
-    validate_export_parity(all_html_slides, all_html_slides)
+    # ── Enforce image requirements — if should_use_image() says yes, image MUST exist ──
+    for idx, slide in enumerate(slides):
+        if should_use_image(slide) and not slide.get("content", {}).get("image_url"):
+            raise SlideRenderError(
+                [f"Slide {idx + 1} ({slide.get('type', '?')}): image required but missing"]
+            )
 
-    # ── Visual export (PNG/PDF) — skip rendering if engine unavailable ──
+    # ── Validate export parity — ensures same HTML goes to export as editor ──
+    export_html_slides = list(all_html_slides)  # actual copy used for export
+    validate_export_parity(all_html_slides, export_html_slides)
+
+    # ── Visual export (PNG/PDF) — Playwright is REQUIRED, no fallback ──
     logger.info("[pipeline] Running visual export pipeline")
     output_dir = _resolve_output_dir()
-    visual_output = await _run_visual_export_safe(all_html_slides, output_dir)
+    visual_output = await _run_visual_export_safe(export_html_slides, output_dir)
     state = state.model_copy(update={"visual_render_output": visual_output})
 
     completed_steps += 1
@@ -289,9 +298,9 @@ async def run_pipeline(prompt: str, options: dict = {},
 async def _run_visual_export_safe(html_slides: list[str], output_dir: str) -> dict:
     """Run visual export — STRICT: failures propagate, no partial success.
 
-    Attempts browser-based rendering for images/PDF.
-    If Playwright is not installed, falls back to HTML-only export.
-    If rendering fails for any slide, the error propagates.
+    Playwright is REQUIRED for browser-based rendering.
+    If Playwright is not installed or rendering fails → pipeline fails.
+    No fallback to HTML-only export.
     """
     render_instructions = build_render_instructions(len(html_slides))
 
