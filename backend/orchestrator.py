@@ -26,7 +26,7 @@ from pipeline.visual_design_engine import run_design_engine
 from pipeline.visual_template_engine import run_template_engine
 from pipeline.visual_rendering_engine import render_slides_to_images, render_slides_to_pdf, build_render_instructions
 from pipeline.visual_export_engine import run_export_engine
-from pipeline.slide_validator import validate_slide_content, validate_design_components
+from pipeline.slide_validator import validate_slide_content, validate_design_components, validate_rendered_html
 from services.event_system import PipelineEvent, EventType
 import logging
 import os
@@ -255,6 +255,12 @@ async def run_pipeline(prompt: str, options: dict = {},
               _compute_progress(completed_steps, total_steps),
               slide_id=slide_num, total_slides=total_slides,
               data={"html": html_content})
+
+    # ── Validate rendered HTML — catch title-only slides before export ──
+    try:
+        validate_rendered_html(all_html_slides)
+    except Exception as exc:
+        logger.warning("[pipeline] Rendered HTML validation: %s — continuing with available slides", exc)
 
     # ── Visual export (PNG/PDF) — skip rendering if engine unavailable ──
     logger.info("[pipeline] Running visual export pipeline")

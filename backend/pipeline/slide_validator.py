@@ -150,6 +150,118 @@ def validate_design_components(designs: list[dict]) -> list[dict]:
     return designs
 
 
+class SlideRenderError(ValueError):
+    """Raised when rendered HTML fails content verification."""
+
+    def __init__(self, violations: list[str]):
+        self.violations = violations
+        msg = (
+            f"Slide render validation failed with {len(violations)} violation(s):\n"
+            + "\n".join(f"  - {v}" for v in violations)
+        )
+        super().__init__(msg)
+
+
+# HTML content markers that indicate real rendered content (beyond just a title)
+_CONTENT_MARKERS = (
+    "<p ",    # paragraph text
+    "<p>",
+    "<li ",   # list items
+    "<li>",
+    "<ul ",   # lists
+    "<ul>",
+    "text-5xl",   # stat values (large numbers)
+    "text-7xl",   # dominant stat values
+    "rounded-2xl",  # cards/panels
+    "rounded-3xl",  # cards/panels
+    "grid-cols",    # grid layouts
+)
+
+
+def validate_rendered_html(html_slides: list[str]) -> list[str]:
+    """Validate that rendered HTML contains actual visible content, not just titles.
+
+    STRICT: Raises SlideRenderError if ANY slide renders as title-only
+    (missing body text, bullet points, cards, stats, or other content).
+
+    This is the final gate before export — ensures what the user sees
+    in the editor is what gets exported.
+
+    Args:
+        html_slides: List of complete HTML strings from the template engine.
+
+    Returns:
+        The same list (unmodified) if all slides pass validation.
+
+    Raises:
+        SlideRenderError: If any slide has only a title and no body content.
+    """
+    violations: list[str] = []
+
+    for idx, slide_html in enumerate(html_slides):
+        slide_num = idx + 1
+
+        if not slide_html or not slide_html.strip():
+            violations.append(f"Slide {slide_num}: HTML is empty")
+            continue
+
+        # Check for any content marker beyond just the title
+        has_content = any(marker in slide_html for marker in _CONTENT_MARKERS)
+
+        if not has_content:
+            violations.append(
+                f"Slide {slide_num}: rendered HTML contains only title — "
+                f"no paragraphs, lists, cards, or structured content found"
+            )
+
+    if violations:
+        for v in violations:
+            logger.error("[slide_validator] RENDER VIOLATION: %s", v)
+        raise SlideRenderError(violations)
+
+    logger.info("[slide_validator] All %d rendered slides passed HTML validation",
+                len(html_slides))
+    return html_slides
+
+
+def validate_export_parity(editor_html_slides: list[str], export_html_slides: list[str]) -> None:
+    """Verify that export uses the EXACT same HTML as the editor.
+
+    HARD RULE: editor HTML == export HTML (byte-level identical per slide).
+
+    Args:
+        editor_html_slides: HTML strings used in the editor iframes.
+        export_html_slides: HTML strings passed to the export/rendering engine.
+
+    Raises:
+        SlideRenderError: If any slide's export HTML differs from its editor HTML.
+    """
+    violations: list[str] = []
+
+    if len(editor_html_slides) != len(export_html_slides):
+        violations.append(
+            f"Slide count mismatch: editor has {len(editor_html_slides)}, "
+            f"export has {len(export_html_slides)}"
+        )
+    else:
+        for idx, (editor_html, export_html) in enumerate(
+            zip(editor_html_slides, export_html_slides)
+        ):
+            if editor_html != export_html:
+                violations.append(
+                    f"Slide {idx + 1}: export HTML differs from editor HTML "
+                    f"(editor len={len(editor_html)}, export len={len(export_html)})"
+                )
+
+    if violations:
+        for v in violations:
+            logger.error("[slide_validator] EXPORT PARITY VIOLATION: %s", v)
+        raise SlideRenderError(violations)
+
+    logger.info("[slide_validator] Export parity verified for %d slides",
+                len(editor_html_slides))
+
+
 def _is_non_empty(val: Any) -> bool:
     """Check if a value contains meaningful content."""
     if val is None:

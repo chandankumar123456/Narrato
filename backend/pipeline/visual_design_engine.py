@@ -355,11 +355,25 @@ def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
 
     items = _extract_items(content)
 
+    # Resolve image_url: content.image_url (primary) OR slide.image_path (fallback)
+    def _resolve_image_url() -> str:
+        url = content.get("image_url", "")
+        if url:
+            return url
+        # Fallback: check slide-level image_path (backward compatibility)
+        path = slide_data.get("image_path")
+        if path:
+            import os
+            abs_path = os.path.abspath(path)
+            return f"file://{abs_path}"
+        return ""
+
     if layout == "grid_cards":
         components["type"] = "card_grid"
         components["items"] = items
-        if content.get("image_url"):
-            components["image_url"] = content["image_url"]
+        img_url = _resolve_image_url()
+        if img_url:
+            components["image_url"] = img_url
 
     elif layout == "step_flow":
         steps = []
@@ -403,9 +417,9 @@ def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
         components["type"] = "split"
         components["body"] = _truncate(str(body), 30)
         components["items"] = items
-        # Attach image_url if present
-        if content.get("image_url"):
-            components["image_url"] = content["image_url"]
+        img_url = _resolve_image_url()
+        if img_url:
+            components["image_url"] = img_url
 
     elif layout == "hero_center":
         subtitle = (
@@ -430,9 +444,9 @@ def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
             )
         components["type"] = "hero"
         components["subtitle"] = _truncate(str(subtitle), 20)
-        # Attach image_url if present (for AI-generated images)
-        if content.get("image_url"):
-            components["image_url"] = content["image_url"]
+        img_url = _resolve_image_url()
+        if img_url:
+            components["image_url"] = img_url
 
     return components
 
