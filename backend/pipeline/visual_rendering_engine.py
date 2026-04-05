@@ -207,12 +207,17 @@ def _merge_pdfs(pdf_pages: list[bytes], output_path: str) -> None:
     except ImportError:
         logger.warning(
             "[rendering_engine] pypdf not installed — "
-            "falling back to concatenated single-page PDFs. "
+            "multi-slide PDF will contain only the first slide. "
             "Install with: pip install pypdf"
         )
-        # Fallback: write first slide only (pypdf recommended for multi-slide)
+        # Fallback: write first slide only (install pypdf for full multi-slide support)
         with open(output_path, "wb") as f:
             f.write(pdf_pages[0])
+        logger.warning(
+            "[rendering_engine] Wrote single-slide PDF (%d of %d slides). "
+            "Install pypdf for complete multi-slide export.",
+            1, len(pdf_pages),
+        )
 
 
 async def run_rendering_engine(

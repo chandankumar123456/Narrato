@@ -5,6 +5,7 @@ from services.ai_image_service import generate_image_for_slide
 import asyncio
 import logging
 import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +71,8 @@ Return: ["query1", "query2", ...]
             # - slide["content"]["image_url"] for design engine → template engine flow
             updated_slide = {**slide, "image_path": img_path}
             if img_path:
-                # Convert to absolute file:// URI for Playwright rendering
-                abs_path = os.path.abspath(img_path)
-                image_url = f"file://{abs_path}"
+                # Convert to absolute file URI for Playwright rendering (cross-platform)
+                image_url = Path(os.path.abspath(img_path)).as_uri()
                 updated_content = {**slide.get("content", {}), "image_url": image_url}
                 updated_slide["content"] = updated_content
                 logger.info("[visual_mapper] Slide %s: image_url = %s",

@@ -19,6 +19,7 @@ Themes:
 """
 
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -363,9 +364,8 @@ def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
         # Fallback: check slide-level image_path (backward compatibility)
         path = slide_data.get("image_path")
         if path:
-            import os
-            abs_path = os.path.abspath(path)
-            return f"file://{abs_path}"
+            from pathlib import Path
+            return Path(os.path.abspath(path)).as_uri()
         return ""
 
     if layout == "grid_cards":
