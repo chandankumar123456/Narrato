@@ -157,18 +157,41 @@ def _extract_items(content: dict) -> list[dict]:
     """Extract structured items from slide content."""
     items = []
 
-    # Try bullet_points / bullets
-    for key in ("bullet_points", "bullets", "items", "features"):
+    # Try bullet_points / bullets / cards / features
+    for key in ("bullet_points", "bullets", "items", "features", "cards"):
         raw = content.get(key)
         if isinstance(raw, list):
             for item in raw[:MAX_ITEMS]:
                 if isinstance(item, str):
                     items.append({"text": _truncate(item)})
                 elif isinstance(item, dict):
-                    items.append({
+                    normalized = {
                         k: _truncate(str(v)) for k, v in item.items()
-                    })
+                    }
+                    # Synthesize 'text' from label/description when missing
+                    if "text" not in normalized:
+                        label = normalized.get("label", "")
+                        desc = normalized.get("description", "")
+                        if label and desc:
+                            normalized["text"] = _truncate(f"{label}: {desc}", 30)
+                        elif desc:
+                            normalized["text"] = desc
+                        elif label:
+                            normalized["text"] = label
+                    items.append(normalized)
             return items
+
+    # Try comparison-style content (left_points / right_points)
+    left_pts = content.get("left_points", [])
+    right_pts = content.get("right_points", [])
+    if left_pts or right_pts:
+        left_label = content.get("left_label", "")
+        right_label = content.get("right_label", "")
+        for pt in left_pts:
+            items.append({"text": _truncate(f"{left_label}: {pt}" if left_label else str(pt), 30)})
+        for pt in right_pts:
+            items.append({"text": _truncate(f"{right_label}: {pt}" if right_label else str(pt), 30)})
+        return items[:MAX_ITEMS]
 
     # Try stats
     stats = content.get("stats")
@@ -180,6 +203,21 @@ def _extract_items(content: dict) -> list[dict]:
                     "label": _truncate(str(s.get("label", ""))),
                 })
         return items
+
+    # Try flat stat fields (from narrative generator stats_slide)
+    stat_val = content.get("stat")
+    if stat_val is not None:
+        stat_label = content.get("stat_label", "")
+        description = content.get("description", "")
+        source = content.get("source", "")
+        items.append({"value": str(stat_val), "label": _truncate(str(stat_label or description))})
+        # Add remaining key points from description if distinct
+        if description and description != stat_label:
+            for part in str(description).split(" | ")[:MAX_ITEMS - 1]:
+                part = part.strip()
+                if part:
+                    items.append({"value": "", "label": _truncate(part)})
+        return items[:MAX_ITEMS]
 
     # Try events (timeline)
     events = content.get("events")
@@ -261,10 +299,16 @@ def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
     elif layout == "hero_center":
         subtitle = (
             content.get("subtitle")
+            or content.get("key_takeaway")
             or content.get("body")
             or content.get("description")
             or ""
         )
+        # Fall back to joining bullets if no subtitle found
+        if not subtitle:
+            bullets = content.get("bullets", [])
+            if bullets:
+                subtitle = " · ".join(str(b) for b in bullets[:3])
         components["type"] = "hero"
         components["subtitle"] = _truncate(str(subtitle), 20)
 
