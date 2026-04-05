@@ -154,13 +154,22 @@ def select_layout(slide_data: dict) -> str:
 
 
 def _extract_items(content: dict) -> list[dict]:
-    """Extract structured items from slide content."""
-    items = []
+    """Extract structured items from slide content.
+
+    Handles ALL known upstream content schemas:
+      - bullet_points / bullets / items / features / cards (list[str|dict])
+      - steps / flow (list[dict] with step/text/label)
+      - left_points / right_points (comparison)
+      - stats (list[dict]) and flat stat fields (stat/stat_label)
+      - events (timeline)
+      - body / description / cta_text / subtitle (fallback single item)
+    """
+    items: list[dict] = []
 
     # Try bullet_points / bullets / cards / features
     for key in ("bullet_points", "bullets", "items", "features", "cards"):
         raw = content.get(key)
-        if isinstance(raw, list):
+        if isinstance(raw, list) and raw:
             for item in raw[:MAX_ITEMS]:
                 if isinstance(item, str):
                     items.append({"text": _truncate(item)})
@@ -181,6 +190,20 @@ def _extract_items(content: dict) -> list[dict]:
                     items.append(normalized)
             return items
 
+    # Try steps / flow (structured step lists)
+    for key in ("steps", "flow"):
+        raw = content.get(key)
+        if isinstance(raw, list) and raw:
+            for idx, item in enumerate(raw[:MAX_ITEMS]):
+                if isinstance(item, str):
+                    items.append({"step": idx + 1, "text": _truncate(item)})
+                elif isinstance(item, dict):
+                    items.append({
+                        "step": item.get("step", idx + 1),
+                        "text": _truncate(str(item.get("text", item.get("label", item.get("description", ""))))),
+                    })
+            return items
+
     # Try comparison-style content (left_points / right_points)
     left_pts = content.get("left_points", [])
     right_pts = content.get("right_points", [])
@@ -195,7 +218,7 @@ def _extract_items(content: dict) -> list[dict]:
 
     # Try stats
     stats = content.get("stats")
-    if isinstance(stats, list):
+    if isinstance(stats, list) and stats:
         for s in stats[:MAX_ITEMS]:
             if isinstance(s, dict):
                 items.append({
@@ -209,7 +232,6 @@ def _extract_items(content: dict) -> list[dict]:
     if stat_val is not None:
         stat_label = content.get("stat_label", "")
         description = content.get("description", "")
-        source = content.get("source", "")
         items.append({"value": str(stat_val), "label": _truncate(str(stat_label or description))})
         # Add remaining key points from description if distinct
         if description and description != stat_label:
@@ -221,18 +243,24 @@ def _extract_items(content: dict) -> list[dict]:
 
     # Try events (timeline)
     events = content.get("events")
-    if isinstance(events, list):
+    if isinstance(events, list) and events:
         for idx, ev in enumerate(events[:MAX_ITEMS]):
             if isinstance(ev, dict):
                 items.append({
                     "step": idx + 1,
                     "date": str(ev.get("date", "")),
-                    "text": _truncate(str(ev.get("description", ""))),
+                    "text": _truncate(str(ev.get("description", ev.get("text", "")))),
                 })
         return items
 
-    # Fallback: extract body/description as single item
-    body = content.get("body") or content.get("description") or ""
+    # Fallback: extract body/description/cta_text/subtitle as single item
+    body = (
+        content.get("body")
+        or content.get("description")
+        or content.get("cta_text")
+        or content.get("subtitle")
+        or ""
+    )
     if body:
         items.append({"text": _truncate(str(body))})
 
@@ -258,6 +286,8 @@ def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
     if layout == "grid_cards":
         components["type"] = "card_grid"
         components["items"] = items
+        if content.get("image_url"):
+            components["image_url"] = content["image_url"]
 
     elif layout == "step_flow":
         steps = []
@@ -291,26 +321,40 @@ def map_components(slide_data: dict, layout: str) -> dict[str, Any]:
         components["events"] = timeline
 
     elif layout == "split_left_text_right_visual":
-        body = content.get("body") or content.get("description") or ""
+        body = (
+            content.get("body")
+            or content.get("description")
+            or content.get("summary")
+            or content.get("cta_text")
+            or ""
+        )
         components["type"] = "split"
         components["body"] = _truncate(str(body), 30)
         components["items"] = items
+        # Attach image_url if present
+        if content.get("image_url"):
+            components["image_url"] = content["image_url"]
 
     elif layout == "hero_center":
         subtitle = (
             content.get("subtitle")
             or content.get("key_takeaway")
+            or content.get("cta_text")
             or content.get("body")
             or content.get("description")
+            or content.get("summary")
             or ""
         )
-        # Fall back to joining bullets if no subtitle found
+        # Fall back to joining bullets/key_points if no subtitle found
         if not subtitle:
-            bullets = content.get("bullets", [])
+            bullets = content.get("bullets") or content.get("key_points") or []
             if bullets:
                 subtitle = " · ".join(str(b) for b in bullets[:3])
         components["type"] = "hero"
         components["subtitle"] = _truncate(str(subtitle), 20)
+        # Attach image_url if present (for AI-generated images)
+        if content.get("image_url"):
+            components["image_url"] = content["image_url"]
 
     return components
 

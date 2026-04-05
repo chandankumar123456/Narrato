@@ -66,7 +66,7 @@ export default function SlidePanel({
                     transformOrigin: "top left",
                   }}
                   loading="lazy"
-                  sandbox="allow-same-origin"
+                  sandbox="allow-same-origin allow-scripts"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">

@@ -84,7 +84,7 @@ export default function ProcessingPage({
                     srcDoc={slide.html}
                     title={`Slide ${slide.slide_id}`}
                     className="w-full h-full border-0 pointer-events-none"
-                    sandbox="allow-same-origin"
+                    sandbox="allow-same-origin allow-scripts"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">

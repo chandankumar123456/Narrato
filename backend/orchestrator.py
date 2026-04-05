@@ -26,6 +26,7 @@ from pipeline.visual_design_engine import run_design_engine
 from pipeline.visual_template_engine import run_template_engine
 from pipeline.visual_rendering_engine import render_slides_to_images, render_slides_to_pdf, build_render_instructions
 from pipeline.visual_export_engine import run_export_engine
+from pipeline.slide_validator import validate_slide_content, validate_design_components
 from services.event_system import PipelineEvent, EventType
 import logging
 import os
@@ -222,6 +223,9 @@ async def run_pipeline(prompt: str, options: dict = {},
     theme = getattr(state, "theme", "modern")
     all_html_slides = []
 
+    # Validate slide content BEFORE rendering — catch empty/malformed slides
+    slides = validate_slide_content(slides)
+
     _emit(EventType.STAGE_UPDATE, "visual_start",
           "Designing and rendering slides…",
           _compute_progress(completed_steps, total_steps),
@@ -232,6 +236,9 @@ async def run_pipeline(prompt: str, options: dict = {},
 
         # Design this slide (deterministic, no LLM)
         designs = run_design_engine([slide], state_theme=theme)
+
+        # Validate design components before template rendering
+        designs = validate_design_components(designs)
         completed_steps += 1
         _emit(EventType.SLIDE_DESIGNED, "design",
               f"Designing slide {slide_num} of {total_slides}…",

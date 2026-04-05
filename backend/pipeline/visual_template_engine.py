@@ -69,9 +69,21 @@ def _render_hero_center(components: dict, theme: dict) -> str:
     text_secondary = theme["text_secondary"]
     title_grad = theme["title_gradient"]
     text_muted = theme["text_muted"]
+    image_url = components.get("image_url", "")
+
+    # Optional background image (AI-generated, context-aware)
+    bg_image = ""
+    if image_url:
+        bg_image = (
+            f'<div class="absolute inset-0 z-0">'
+            f'<img src="{_esc(image_url)}" alt="" class="w-full h-full object-cover opacity-20" />'
+            f'<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>'
+            f'</div>'
+        )
 
     return f"""\
-<div class="flex-1 flex items-center justify-center">
+{bg_image}
+<div class="flex-1 flex items-center justify-center relative z-10">
   <div class="text-center max-w-4xl mx-auto">
     <!-- Accent bar — focal point anchor -->
     <div class="w-16 h-1.5 {accent_line} rounded-full mx-auto mb-10"></div>
@@ -132,7 +144,7 @@ def _render_grid_cards(components: dict, theme: dict) -> str:
 
 
 def _render_split(components: dict, theme: dict) -> str:
-    """Split layout — left text dominance with right visual placeholder."""
+    """Split layout — left text dominance with right visual placeholder or image."""
     title = _esc(components.get("title", ""))
     body = _esc(components.get("body", ""))
     accent = theme["accent"]
@@ -143,6 +155,7 @@ def _render_split(components: dict, theme: dict) -> str:
     card_border = theme["card_border"]
     card_shadow = theme["card_shadow"]
     title_grad = theme["title_gradient"]
+    image_url = components.get("image_url", "")
 
     items = components.get("items", [])
     bullet_parts = []
@@ -156,6 +169,19 @@ def _render_split(components: dict, theme: dict) -> str:
             )
     bullets_html = "\n".join(bullet_parts)
 
+    # Right panel: AI image or visual placeholder
+    if image_url:
+        right_panel = f"""\
+    <div class="{card_bg} {card_border} {card_shadow} rounded-3xl w-full aspect-[4/3] overflow-hidden">
+      <img src="{_esc(image_url)}" alt="{title}" class="w-full h-full object-cover" />
+    </div>"""
+    else:
+        right_panel = f"""\
+    <div class="{card_bg} {card_border} {card_shadow} rounded-3xl w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden">
+      <div class="absolute inset-0 {accent_line} opacity-[0.03]"></div>
+      <span class="{text_muted} text-base tracking-widest uppercase font-medium">Visual</span>
+    </div>"""
+
     return f"""\
 <div class="flex w-full max-w-7xl mx-auto gap-16 flex-1 items-center">
   <!-- Left: text content (dominant) -->
@@ -165,12 +191,9 @@ def _render_split(components: dict, theme: dict) -> str:
     {f'<p class="text-xl {text_secondary} mb-8 leading-relaxed font-light">{body}</p>' if body else ''}
     {f'<ul class="{text_secondary} text-lg space-y-4 leading-relaxed">{bullets_html}</ul>' if bullets_html else ''}
   </div>
-  <!-- Right: visual placeholder (secondary weight) -->
+  <!-- Right: visual (secondary weight) -->
   <div class="flex-1 flex items-center justify-center">
-    <div class="{card_bg} {card_border} {card_shadow} rounded-3xl w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden">
-      <div class="absolute inset-0 {accent_line} opacity-[0.03]"></div>
-      <span class="{text_muted} text-base tracking-widest uppercase font-medium">Visual</span>
-    </div>
+    {right_panel}
   </div>
 </div>"""
 
