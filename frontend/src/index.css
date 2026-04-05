@@ -203,3 +203,26 @@ input[type="range"]::-moz-range-thumb {
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* ─── Editor Design Tokens ───
+   Dark surface hierarchy for editor context.
+   Uses the same primary/accent tokens as the rest of Narrato
+   but with dark surfaces for the editing environment. */
+.editor-surface {
+  --editor-bg: #0a0a0f;
+  --editor-surface: #0f0f14;
+  --editor-surface-raised: #12121a;
+  --editor-border: rgba(255, 255, 255, 0.05);
+  --editor-border-hover: rgba(255, 255, 255, 0.1);
+  --editor-text: rgba(255, 255, 255, 0.9);
+  --editor-text-secondary: rgba(255, 255, 255, 0.5);
+  --editor-text-muted: rgba(255, 255, 255, 0.3);
+  font-family: var(--font-body);
+}
+
+.editor-surface h1,
+.editor-surface h2,
+.editor-surface h3,
+.editor-surface h4 {
+  font-family: var(--font-heading);
+}

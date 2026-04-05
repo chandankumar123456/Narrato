@@ -2,20 +2,22 @@ import { Link } from "react-router-dom";
 
 /**
  * Editor navbar — minimal top bar with logo, generate, and download actions.
+ * Uses Narrato design tokens for visual consistency across the app.
  */
 export default function EditorNavbar({ onExport }) {
   return (
-    <nav className="w-full bg-[#0a0a0f]/90 backdrop-blur-xl border-b border-white/5 sticky top-0 z-40">
+    <nav className="w-full bg-[#0a0a0f]/95 backdrop-blur-xl border-b border-white/[0.06] sticky top-0 z-40">
       <div className="px-4 h-12 flex items-center justify-between">
-        {/* Left: Logo */}
+        {/* Left: Logo — matches main Navbar branding */}
         <div className="flex items-center gap-4">
           <Link
             to="/"
-            className="font-heading text-white font-bold text-sm tracking-tight no-underline
+            className="text-white font-bold text-sm tracking-tight no-underline
               flex items-center gap-2"
+            style={{ fontFamily: "'Manrope', sans-serif" }}
           >
             <div className="w-6 h-6 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600
-              flex items-center justify-center text-[10px] font-bold">
+              flex items-center justify-center text-[10px] font-bold text-white">
               N
             </div>
             Narrato
