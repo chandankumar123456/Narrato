@@ -28,15 +28,25 @@ class SlideValidationError(ValueError):
         super().__init__(msg)
 
 
-# Minimum content checks per component type
+# Minimum content checks per component type (empty list = only title / type-specific rules below)
 _COMPONENT_CHECKS: dict[str, list[str]] = {
     "card_grid": ["items"],
     "steps": ["steps"],
     "stats": ["items"],
     "timeline": ["events"],
-    "split": ["body", "items"],  # at least one must be non-empty
-    "hero": ["subtitle"],
+    "split": ["body", "items"],
+    "hero": [],
 }
+
+# Structured slides may be title-only (design layer still produces a valid hero)
+_TITLE_ONLY_SLIDE_TYPES = frozenset({
+    "title_slide",
+    "section_header",
+    "thank_you_slide",
+    "quote_slide",
+    "conclusion_slide",
+    "cta_slide",
+})
 
 
 def validate_slide_content(slides: list[dict]) -> list[dict]:
@@ -73,9 +83,9 @@ def validate_slide_content(slides: list[dict]) -> list[dict]:
         if not title:
             violations.append(f"Slide {slide_id} ({slide_type}): missing title")
 
-        # Check that at least one content field beyond title is non-empty
+        # At least one content field beyond title (except whitelisted minimal slides)
         content_keys = {k for k, v in content.items() if k != "title" and _is_non_empty(v)}
-        if not content_keys:
+        if not content_keys and str(slide_type).lower() not in _TITLE_ONLY_SLIDE_TYPES:
             violations.append(
                 f"Slide {slide_id} ({slide_type}): has title but no content body — "
                 f"all fields besides title are empty. Keys: {list(content.keys())}"
@@ -116,7 +126,6 @@ def validate_design_components(designs: list[dict]) -> list[dict]:
         if not title:
             violations.append(f"Design {idx} ({layout}): empty title")
 
-        # Check component-type-specific required fields
         checks = _COMPONENT_CHECKS.get(comp_type, [])
         has_content = False
         for field in checks:
@@ -125,16 +134,28 @@ def validate_design_components(designs: list[dict]) -> list[dict]:
                 has_content = True
                 break
 
-        # For "hero" type, subtitle is the primary content
+        # Hero: title is the dominant element; subtitle, kicker, footer are optional
         if comp_type == "hero":
-            subtitle = components.get("subtitle", "")
-            has_content = bool(subtitle and subtitle.strip())
+            has_content = True
+            if not any(
+                _is_non_empty(components.get(k))
+                for k in ("subtitle", "kicker", "cover_footer")
+            ):
+                logger.debug(
+                    "[slide_validator] Design %s hero is title-only (no subtitle/kicker/footer)",
+                    idx,
+                )
 
-        # For "split", either body or items must exist
+        # Split: narrative may live in body_lead after enrichment
         if comp_type == "split":
             body = components.get("body", "")
             items = components.get("items", [])
-            has_content = bool(body and body.strip()) or bool(items)
+            lead = components.get("body_lead", "")
+            has_content = (
+                bool(body and str(body).strip())
+                or bool(items)
+                or bool(lead and str(lead).strip())
+            )
 
         if checks and not has_content:
             violations.append(
@@ -164,17 +185,27 @@ class SlideRenderError(ValueError):
 
 # HTML content markers that indicate real rendered content (beyond just a title)
 _CONTENT_MARKERS = (
-    "<p ",    # paragraph text
+    "<p ",
     "<p>",
-    "<li ",   # list items
+    "<li ",
     "<li>",
-    "<ul ",   # lists
+    "<ul ",
     "<ul>",
-    "text-5xl",   # stat values (large numbers)
-    "text-7xl",   # dominant stat values
-    "rounded-2xl",  # cards/panels
-    "rounded-3xl",  # cards/panels
-    "grid-cols",    # grid layouts
+    "slide-kicker",
+    "slide-cover-footer",
+    "slide-subtitle-hero",
+    "slide-body",
+    "slide-body-lg",
+    "slide-body-sm",
+    "stat-value",
+    "grid-cards",
+    "card ",
+    "layout-hero",
+    "split-visual",
+    "visual-abstract",
+    "mini-card",
+    "step-card",
+    "timeline-text",
 )
 
 

@@ -239,7 +239,9 @@ All slide rendering uses `<iframe>` elements:
 | SlidePanel thumbnails | `src={html_url}` | `allow-same-origin` | `pointer-events-none`, scaled 12% |
 | SlideCanvas (active) | `srcDoc={html}` or `src={html_url}` | `allow-same-origin allow-scripts` | Full interaction |
 
-HTML slides are standalone documents (1920×1080) with Tailwind CDN. The `cacheKey` query parameter forces iframe refresh after content updates.
+HTML slides are standalone documents (1920×1080) with **embedded CSS** from the backend (`pipeline/static/slides.css` inlined in each document). They are not styled with Tailwind inside the iframe; the app shell still uses Tailwind v4 separately.
+
+The `cacheKey` query parameter forces iframe refresh after content updates.
 
 ### HTML Injection Safety
 
@@ -432,7 +434,7 @@ For SSE (`/stream`), ensure `proxy_buffering off` is set to prevent nginx from b
 
 ### Design System Tokens
 
-The design system is defined in `src/index.css` via Tailwind v4 `@theme` directive:
+The **application UI** design system is defined in `src/index.css` via Tailwind v4 `@theme` directive:
 
 | Token | Value | Use |
 |-------|-------|-----|
@@ -444,4 +446,5 @@ The design system is defined in `src/index.css` via Tailwind v4 `@theme` directi
 | `--font-heading` | Manrope | Headlines, section headers |
 | `--font-body` | Inter | Body text, labels |
 
+**Slide decks** inside iframes use the backend’s `slides.css` (themes, slide typography, layout variants). Changing slide appearance is done in the backend repo under `backend/pipeline/static/slides.css`, not in the frontend Tailwind theme.
 

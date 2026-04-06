@@ -431,10 +431,10 @@ class TestHelpers:
 # =====================================================================
 
 class TestStrictSlideVisualRendering:
-    def test_visual_pipeline_with_strict_slides(self):
+    @pytest.mark.asyncio
+    async def test_visual_pipeline_with_strict_slides(self):
         """Verify that a strict-mode state renders through the visual design + template pipeline."""
-        from pipeline.visual_design_engine import run_design_engine
-        from pipeline.visual_template_engine import run_template_engine
+        from pipeline.dynamic_composition_engine import run_dynamic_composition_engine
 
         slides = [
             {"slide_id": 0, "type": "title_slide",
@@ -457,15 +457,14 @@ class TestStrictSlideVisualRendering:
              "image_path": None},
         ]
 
-        designs = run_design_engine(slides)
+        designs, html_slides = await run_dynamic_composition_engine(slides, state_theme="modern")
         assert len(designs) == 5
-
-        html_slides = run_template_engine(designs)
         assert len(html_slides) == 5
 
         for html in html_slides:
             assert "<!DOCTYPE html>" in html
-            assert "tailwindcss" in html
+            assert "slide-frame" in html
+            assert "data-theme=" in html
 
 
 # =====================================================================

@@ -20,14 +20,11 @@ from pipeline.narrative_generator import generate_narrative
 from pipeline.strict_slide_planner import plan_slides_strict
 from pipeline.strict_content_structurer import generate_strict_content
 from pipeline.content_validator import validate_content
-from pipeline.visual_mapper import generate_visual_queries
 from pipeline.speaker_notes_generator import generate_speaker_notes
-from pipeline.visual_design_engine import run_design_engine
-from pipeline.visual_template_engine import run_template_engine
+from pipeline.dynamic_composition_engine import run_dynamic_composition_engine
 from pipeline.visual_rendering_engine import render_slides_to_images, render_slides_to_pdf, build_render_instructions
 from pipeline.visual_export_engine import run_export_engine
 from pipeline.slide_validator import validate_slide_content, validate_design_components, validate_rendered_html, validate_export_parity, SlideRenderError
-from pipeline.visual_design_engine import should_use_image
 from services.event_system import PipelineEvent, EventType
 import logging
 import os
@@ -119,9 +116,9 @@ async def run_pipeline(prompt: str, options: dict = {},
           total_slides=total_slides)
 
     # ── Progress math (simplified) ────────────────────────────────
-    # Global steps: parse(1) + state(1) + narrative(1) + visuals(1) + notes(1) + ppt(1) = 6
+    # Global steps: parse(1) + state(1) + narrative(1) + notes(1) + ppt(1) = 5
     # Per-slide: design(1) + render(1) = 2
-    GLOBAL_STEPS = 6
+    GLOBAL_STEPS = 5
     per_slide_steps = 2
     total_steps = GLOBAL_STEPS + (total_slides * per_slide_steps)
     completed_steps = 2  # parse + state
@@ -195,13 +192,6 @@ async def run_pipeline(prompt: str, options: dict = {},
               total_slides=total_slides)
 
     # ── Shared tail (both paths) ──────────────────────────────────
-    # Visual queries (image fetching) — STRICT: failures stop the pipeline
-    state = await generate_visual_queries(state)
-
-    completed_steps += 1
-    _emit(EventType.STAGE_UPDATE, "visual_queries", "Preparing visual elements…",
-          _compute_progress(completed_steps, total_steps),
-          total_slides=total_slides)
 
     # Speaker notes (1 LLM call for ALL slides)
     try:
@@ -229,24 +219,28 @@ async def run_pipeline(prompt: str, options: dict = {},
           _compute_progress(completed_steps, total_steps),
           total_slides=total_slides)
 
+    designs, all_html_slides = await run_dynamic_composition_engine(
+        slides,
+        state_theme=theme
+    )
+
+    # Optional: validate design components if needed
+    try:
+        designs = validate_design_components(designs)
+    except Exception as exc:
+        logger.warning("[pipeline] validation warning, ignoring: %s", exc)
+
     for idx, slide in enumerate(slides):
         slide_num = idx + 1
 
-        # Design this slide (deterministic, no LLM)
-        designs = run_design_engine([slide], state_theme=theme)
-
-        # Validate design components before template rendering
-        designs = validate_design_components(designs)
         completed_steps += 1
         _emit(EventType.SLIDE_DESIGNED, "design",
               f"Designing slide {slide_num} of {total_slides}…",
               _compute_progress(completed_steps, total_steps),
               slide_id=slide_num, total_slides=total_slides)
 
-        # Render HTML for this slide (deterministic, no LLM)
-        html_list = run_template_engine(designs)
-        html_content = html_list[0] if html_list else ""
-        all_html_slides.append(html_content)
+        html_content = all_html_slides[idx] if idx < len(all_html_slides) else ""
+        
         completed_steps += 1
         _emit(EventType.SLIDE_RENDERED, "render",
               f"Rendered slide {slide_num} of {total_slides}…",
@@ -257,20 +251,13 @@ async def run_pipeline(prompt: str, options: dict = {},
     # ── Validate rendered HTML — STRICT: stops pipeline if any slide is title-only ──
     validate_rendered_html(all_html_slides)
 
-    # ── Enforce image requirements — if should_use_image() says yes, image MUST exist ──
-    for idx, slide in enumerate(slides):
-        if should_use_image(slide) and not slide.get("content", {}).get("image_url"):
-            raise RuntimeError(
-                f"Image required but missing for slide {idx + 1} ({slide.get('type', '?')})"
-            )
-
     # ── Validate export parity — ensures same HTML goes to export as editor ──
     export_html_slides = list(all_html_slides)  # actual copy used for export
     validate_export_parity(all_html_slides, export_html_slides)
 
     # ── Visual export (PNG/PDF) — Playwright is REQUIRED, no fallback ──
     logger.info("[pipeline] Running visual export pipeline")
-    output_dir = _resolve_output_dir()
+    output_dir = _resolve_output_dir(job_id)
     visual_output = await _run_visual_export_safe(export_html_slides, output_dir)
     state = state.model_copy(update={"visual_render_output": visual_output})
 
@@ -321,10 +308,11 @@ async def _run_visual_export_safe(html_slides: list[str], output_dir: str) -> di
     }
 
 
-def _resolve_output_dir() -> str:
-    """Determine the output directory for visual assets."""
+def _resolve_output_dir(job_id: str) -> str:
+    """Per-job directory for PNG/PDF/HTML copies (avoids collisions between jobs)."""
     base = os.environ.get("NARRATO_OUTPUT_DIR", "./outputs")
-    visual_dir = os.path.join(base, "visual")
+    safe = os.path.basename(job_id) if job_id and job_id != "unknown" else "default"
+    visual_dir = os.path.join(base, "visual", safe)
     os.makedirs(visual_dir, exist_ok=True)
     return visual_dir
 

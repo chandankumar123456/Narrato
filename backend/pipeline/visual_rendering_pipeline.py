@@ -15,8 +15,7 @@ import logging
 import os
 from typing import Optional
 
-from pipeline.visual_design_engine import run_design_engine
-from pipeline.visual_template_engine import run_template_engine
+from pipeline.dynamic_composition_engine import run_dynamic_composition_engine
 from pipeline.visual_rendering_engine import run_rendering_engine
 from pipeline.visual_export_engine import run_export_engine
 
@@ -52,13 +51,12 @@ async def run_visual_pipeline(state) -> dict:
     theme = getattr(state, "theme", "modern")
     output_dir = _resolve_output_dir(state)
 
-    # ── Stage 1: Design Engine ──────────────────────────────────
-    logger.info("[visual_pipeline] Stage 1: Design Engine (%d slides)", len(slides))
-    designs = run_design_engine(slides, state_theme=theme)
-
-    # ── Stage 2: Template Engine ────────────────────────────────
-    logger.info("[visual_pipeline] Stage 2: Template Engine")
-    html_slides = run_template_engine(designs)
+    # ── Stage 1 & 2: Dynamic Composition Engine ──────────────────────────────────
+    logger.info("[visual_pipeline] Stage 1 & 2: Dynamic Composition Engine (%d slides)", len(slides))
+    designs, html_slides = await run_dynamic_composition_engine(
+        slides,
+        state_theme=theme
+    )
 
     # ── Stage 3: Rendering Engine (async, graceful degradation) ──
     logger.info("[visual_pipeline] Stage 3: Rendering Engine")

@@ -10,7 +10,6 @@ Return JSON with these fields:
 - tone: "professional" | "casual" | "inspiring" | "academic" or null
 - audience (string or null)
 - examples_count (int or null)
-- image_preference (bool, default true)
 - language (ISO 639-1 code, default "en")"""
 
     return await call_llm_json(system, f"User prompt: {prompt}")

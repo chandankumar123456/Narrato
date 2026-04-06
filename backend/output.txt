@@ -1,0 +1,32 @@
+INFO:services.llm_client:LLM call attempt 1/3 (provider=openai)
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:services.llm_client:LLM call attempt 1/3 (provider=openai)
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:services.llm_client:LLM call attempt 1/3 (provider=openai)
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:pipeline.dynamic_composition_engine:Slide 1: Layout passed validation on attempt 1
+Testing generate_slide_html...
+
+--- DESIGN SPEC ---
+{'slide_index': 0, 'theme': 'dark', 'presentation': {'slide_number': 1}}
+
+--- FINAL HTML ---
+
+Traceback (most recent call last):
+  File "C:\Users\Chandan Kumar\Documents\Narrato\backend\test_composition.py", line 33, in <module>
+    asyncio.run(main())
+  File "C:\Users\Chandan Kumar\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\Chandan Kumar\AppData\Local\Programs\Python\Python311\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Chandan Kumar\AppData\Local\Programs\Python\Python311\Lib\asyncio\base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\Chandan Kumar\Documents\Narrato\backend\test_composition.py", line 30, in main
+    print(html)
+  File "C:\Users\Chandan Kumar\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 329-330: character maps to <undefined>

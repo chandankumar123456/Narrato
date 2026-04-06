@@ -66,19 +66,26 @@ def build_render_instructions(slide_count: int) -> dict:
 
 
 async def _wait_for_slide_ready(page) -> None:
-    """Wait for a slide page to be fully rendered (Tailwind + images).
-
-    STRICT: If images exist but fail to load, raises ExportRenderError.
-    Checks both complete AND naturalHeight > 0 to ensure images loaded successfully.
-    """
-    # Wait for Tailwind CDN to parse and apply utility classes
-    await page.wait_for_timeout(500)
-    # Wait for all images to finish loading AND verify they loaded successfully
-    # complete=true + naturalHeight=0 means image failed to load
+    """Wait for document complete, fonts, layout flush, then images if any."""
+    await page.wait_for_load_state("load")
     await page.wait_for_function(
-        "() => document.images.length === 0 || Array.from(document.images).every(img => img.complete && img.naturalHeight > 0)",
-        timeout=10000,
+        "() => document.readyState === 'complete'",
+        timeout=15000,
     )
+    # Font loading (no-op if no webfonts; resolves when ready)
+    await page.evaluate("() => document.fonts.ready")
+    await page.evaluate(
+        """() => new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)));
+    })"""
+    )
+    has_img = await page.evaluate("() => document.images.length > 0")
+    if has_img:
+        await page.wait_for_function(
+            "() => Array.from(document.images).every("
+            "img => img.complete && img.naturalHeight > 0)",
+            timeout=10000,
+        )
 
 
 async def render_slides_to_images(
@@ -111,7 +118,7 @@ async def render_slides_to_images(
 
         for idx, slide_html in enumerate(html_slides or []):
             page = await context.new_page()
-            await page.set_content(slide_html, wait_until="networkidle")
+            await page.set_content(slide_html, wait_until="load")
             await _wait_for_slide_ready(page)
 
             png_path = os.path.join(output_dir, f"slide_{idx + 1}.png")
@@ -157,15 +164,17 @@ async def render_slides_to_pdf(
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+            device_scale_factor=1,
+        )
 
         per_slide_pdfs: list[bytes] = []
         for idx, slide_html in enumerate(html_slides):
-            page = await browser.new_page()
-            # Set the EXACT same HTML the editor uses — no reconstruction
-            await page.set_content(slide_html, wait_until="networkidle")
+            page = await context.new_page()
+            await page.set_content(slide_html, wait_until="load")
             await _wait_for_slide_ready(page)
 
-            # Generate PDF for this single slide
             pdf_bytes = await page.pdf(
                 width=f"{VIEWPORT_WIDTH}px",
                 height=f"{VIEWPORT_HEIGHT}px",

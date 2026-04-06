@@ -1,0 +1,115 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\Chandan Kumar\Documents\Narrato
+configfile: pyproject.toml
+plugins: anyio-4.13.0, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 191 items / 9 errors
+
+=================================== ERRORS ====================================
+_________________ ERROR collecting backend/tests/test_api.py __________________
+ImportError while importing test module 'C:\Users\Chandan Kumar\Documents\Narrato\backend\tests\test_api.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_api.py:6: in <module>
+    from main import app
+backend\main.py:14: in <module>
+    from orchestrator import run_pipeline
+backend\orchestrator.py:24: in <module>
+    from pipeline.visual_design_engine import run_design_engine
+E   ModuleNotFoundError: No module named 'pipeline.visual_design_engine'
+___________ ERROR collecting backend/tests/test_design_decision.py ____________
+ImportError while importing test module 'C:\Users\Chandan Kumar\Documents\Narrato\backend\tests\test_design_decision.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_design_decision.py:4: in <module>
+    from pipeline.design_decision import analyze_slide_content, decide_layout, DeckContext
+E   ModuleNotFoundError: No module named 'pipeline.design_decision'
+___________ ERROR collecting backend/tests/test_final_correction.py ___________
+ImportError while importing test module 'C:\Users\Chandan Kumar\Documents\Narrato\backend\tests\test_final_correction.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_final_correction.py:21: in <module>
+    from pipeline.visual_design_engine import (
+E   ModuleNotFoundError: No module named 'pipeline.visual_design_engine'
+___________ ERROR collecting backend/tests/test_final_hardening.py ____________
+ImportError while importing test module 'C:\Users\Chandan Kumar\Documents\Narrato\backend\tests\test_final_hardening.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_final_hardening.py:23: in <module>
+    from pipeline.visual_design_engine import (
+E   ModuleNotFoundError: No module named 'pipeline.visual_design_engine'
+_______________ ERROR collecting backend/tests/test_pipeline.py _______________
+ImportError while importing test module 'C:\Users\Chandan Kumar\Documents\Narrato\backend\tests\test_pipeline.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_pipeline.py:6: in <module>
+    from pipeline.slide_type_assigner import assign_slide_types
+E   ModuleNotFoundError: No module named 'pipeline.slide_type_assigner'
+__________ ERROR collecting backend/tests/test_schema_propagation.py __________
+ImportError while importing test module 'C:\Users\Chandan Kumar\Documents\Narrato\backend\tests\test_schema_propagation.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_schema_propagation.py:23: in <module>
+    from pipeline.visual_design_engine import (
+E   ModuleNotFoundError: No module named 'pipeline.visual_design_engine'
+__________ ERROR collecting backend/tests/test_system_correction.py ___________
+ImportError while importing test module 'C:\Users\Chandan Kumar\Documents\Narrato\backend\tests\test_system_correction.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_system_correction.py:17: in <module>
+    from pipeline.visual_design_engine import (
+E   ModuleNotFoundError: No module named 'pipeline.visual_design_engine'
+___________ ERROR collecting backend/tests/test_system_hardening.py ___________
+ImportError while importing test module 'C:\Users\Chandan Kumar\Documents\Narrato\backend\tests\test_system_hardening.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_system_hardening.py:18: in <module>
+    from pipeline.visual_design_engine import (
+E   ModuleNotFoundError: No module named 'pipeline.visual_design_engine'
+____________ ERROR collecting backend/tests/test_visual_engine.py _____________
+ImportError while importing test module 'C:\Users\Chandan Kumar\Documents\Narrato\backend\tests\test_visual_engine.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+..\..\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend\tests\test_visual_engine.py:19: in <module>
+    from pipeline.visual_design_engine import (
+E   ModuleNotFoundError: No module named 'pipeline.visual_design_engine'
+=========================== short test summary info ===========================
+ERROR backend/tests/test_api.py
+ERROR backend/tests/test_design_decision.py
+ERROR backend/tests/test_final_correction.py
+ERROR backend/tests/test_final_hardening.py
+ERROR backend/tests/test_pipeline.py
+ERROR backend/tests/test_schema_propagation.py
+ERROR backend/tests/test_system_correction.py
+ERROR backend/tests/test_system_hardening.py
+ERROR backend/tests/test_visual_engine.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 9 errors during collection !!!!!!!!!!!!!!!!!!!
+============================== 9 errors in 1.77s ==============================

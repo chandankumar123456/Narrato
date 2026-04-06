@@ -25,7 +25,6 @@ export default function useJob() {
     slide_count: 10,
     tone: "professional",
     visual_style: "modern",
-    image_preference: true,
   });
 
   const pollRef = useRef(null);

@@ -30,7 +30,6 @@ class PresentationState(BaseModel):
     include_stats: bool = True
 
     # Visuals
-    image_preference: bool = True
     visual_style: str = "modern"
     theme: str = "modern"
 
@@ -39,7 +38,6 @@ class PresentationState(BaseModel):
     slide_plan: Optional[list[dict]] = None
     structured_slides: Optional[list[dict]] = None
     speaker_notes: Optional[list[dict]] = None
-    image_queries: Optional[list[str]] = None
     output_path: Optional[str] = None
     design_theme: Optional[str] = None
     metadata: Optional[dict] = None

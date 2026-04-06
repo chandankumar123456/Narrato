@@ -8,7 +8,7 @@ const STYLES = [
 export default function OptionsPanel({ options, onUpdate, disabled }) {
   return (
     <div className="bg-surface-lowest rounded-xl p-6 mt-4 shadow-ambient">
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-6 items-start">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 items-start">
         {/* Slide Count */}
         <div>
           <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-3">
@@ -69,18 +69,6 @@ export default function OptionsPanel({ options, onUpdate, disabled }) {
               </option>
             ))}
           </select>
-        </div>
-
-        {/* Generate Images Toggle */}
-        <div className="flex items-center gap-3 sm:pt-6">
-          <span className="text-sm text-on-surface">Generate Images</span>
-          <button
-            type="button"
-            onClick={() => onUpdate("image_preference", !options.image_preference)}
-            disabled={disabled}
-            className={`toggle-switch ${options.image_preference ? "active" : ""}`}
-            aria-label="Toggle image generation"
-          />
         </div>
       </div>
     </div>

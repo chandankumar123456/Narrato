@@ -303,32 +303,58 @@ Full-deck alignment pass (runs after per-slide evaluation):
 
 Results stored in `state.metadata["deck_consistency"]`.
 
-### 9. Visual Design Engine (`visual_design_engine.py`)
+### 9. Content Visual Transform (`content_visual_transform.py`)
+
+Runs as part of visual enrichment (after components are mapped). Transforms raw strings into **tiered** content the template can emphasize:
+
+- **Stats** — Leading number vs label vs optional parenthetical context (`label_context`)
+- **Titles** — `title_lines` for primary/secondary display lines
+- **Kickers** — `Actor: … | Action: …` (and similar) → two-line uppercase context above the hero
+- **Split slides** — `body_lead` / `body_support` for asymmetric text hierarchy
+- **Deduping** — Subtitle vs title overlap trimmed where safe
+
+**Presentation spec** — `compute_presentation_spec(slide_index, layout, slide_type)` returns `rhythm` (`airy` | `standard` | `dense`) and layout-specific variants, for example:
+
+| Layout area | Variant behavior (examples) |
+|-------------|----------------------------|
+| Hero | `editorial` (left-aligned, side accent) vs `statement` (centered) |
+| Grid | `bento` (one large card + stacked smaller) vs uniform grid |
+| Stats | `spotlight` (mega stat + support row) vs classic grid |
+| Split / steps / timeline | Asymmetric or featured emphasis |
+
+This breaks “same slide every time” and encodes a **focal rule** per layout.
+
+### 10. Visual Design Engine (`visual_design_engine.py`)
 
 **Stage 1** of the visual rendering pipeline. Determines per-slide:
 - **Layout**: `hero_center`, `grid_cards`, `split_left_text_right_visual`, `step_flow`, `stats_blocks`, `timeline_flow`
 - **Theme**: `dark_modern` (default), `minimal_light`, `bold_gradient`
 - **Components**: extracted from slide content (title, subtitle, bullets, stats, steps, etc.)
+- **`presentation`**: dict attached after `_apply_visual_enrichment` — rhythm + variants consumed by the template engine
 
-Layout is mapped from slide type/intent via `INTENT_LAYOUT_MAP`. Each theme defines 14+ visual tokens (backgrounds, text colors, card styles, accent gradients, shadows).
+Layout is mapped from slide type/intent via `INTENT_LAYOUT_MAP`. Each theme defines visual tokens (backgrounds, text colors, card styles, accent gradients, shadows) applied as CSS variables in `static/slides.css`.
 
-### 10. Visual Template Engine (`visual_template_engine.py`)
+### 11. Visual Template Engine (`visual_template_engine.py`)
 
-**Stage 2**: Converts design specs into standalone HTML slides using Tailwind CSS CDN.
+**Stage 2**: Converts design specs into standalone HTML slides with **embedded** `pipeline/static/slides.css` (read at runtime, inlined in a `<style>` block). **No Tailwind CDN** in slide HTML.
 
-Each slide is a complete HTML document rendered at 1920×1080 with:
-- Visual hierarchy (title dominance, supporting elements recede)
-- Focal point design (one dominant element per slide)
-- Asymmetric spacing rhythm (top-heavy breathing, dense middle, open bottom)
-- Premium card styles (glass morphism, shadows, layering)
-- Typography scale (8xl / 6xl / 3xl / lg / sm)
-- HTML-escaped content to prevent XSS
+Each slide is a complete document at 1920×1080 with:
+- **`data-rhythm`** on `.slide-frame` for padding/density variation
+- Semantic layout classes (e.g. `layout-hero--editorial`, `grid-cards--bento`, `layout-stats--spotlight`, `layout-split--asymmetric`)
+- Strict hierarchy: one primary block (mega stat, hero title line, focal card) plus secondary/tertiary tiers
+- Theme via `data-theme` on `.slide` and CSS variables
+- HTML-escaped content (`html.escape`) to prevent XSS
 
-### 11. Visual Rendering Engine (`visual_rendering_engine.py`)
+### 12. Slide validation (`slide_validator.py`)
+
+- **`validate_slide_content`** — Ensures structured slides are non-empty and match expected fields per component type before rendering.
+- **`validate_rendered_html`** — Ensures each slide’s HTML contains real body markers (not title-only), including stats, paragraphs, lists, and layout regions.
+
+### 13. Visual Rendering Engine (`visual_rendering_engine.py`)
 
 **Stage 3**: Renders HTML slides to PNG images and combined PDF using Playwright at 1920×1080. Falls back to instruction-only mode when Playwright is not installed.
 
-### 12. Visual Export Engine (`visual_export_engine.py`)
+### 14. Visual Export Engine (`visual_export_engine.py`)
 
 **Stage 4**: Produces final export artifacts:
 - HTML files (one per slide)
@@ -541,3 +567,21 @@ uv run celery -A worker.celery_app worker --loglevel=info
 - **File storage**: Local `./outputs/` in dev; replace with S3/GCS in production
 - **Task limits**: `task_soft_time_limit=120s`, `task_time_limit=180s`
 - **LLM concurrency**: Semaphore limits to 3 concurrent LLM calls per process
+
+---
+
+## Slide markup and CSS
+
+- **`pipeline/static/slides.css`** — Theme variables, typography, rhythm (`data-rhythm`), and layout-variant classes (hero editorial/statement, bento grid, stats spotlight, asymmetric split, etc.).
+- **`visual_template_engine.py`** — Loads CSS with `_load_slides_css()` and inlines it in each slide’s `<style>` block (no external Tailwind CDN on slides).
+
+When you add or rename layout classes, update the template and `slides.css` together so editor preview, SSE streaming, and Playwright PDF/PNG export stay identical.
+
+**Reference-style pitch layouts (e.g. Edutech startup deck):**
+
+| Pattern | Behavior |
+|---------|----------|
+| Cover (slide 1 hero) | `hero_variant: cover` — centered brand + optional multiline subtitle → eyebrow / tagline + `cover_footer` |
+| Problem | `grid_variant: problem` when intent is `problem` / `problem_slide` and the first stat row or first bullet parses as a leading stat |
+| Market funnel | `stats_variant: funnel` when intent/type contains `market` and the first three stats have currency values (`$`, `€`, …) |
+| Slide index | `presentation.slide_number` → `.slide-deck-index` (zero-padded) |

@@ -480,11 +480,19 @@ class TestPipelineFailure:
 class TestVisualPipelinePlaywrightSkip:
     @pytest.mark.asyncio
     async def test_rendering_engine_requires_playwright(self):
-        """Rendering engine raises RuntimeError when Playwright is not installed."""
+        import importlib.util
+        import tempfile
         from pipeline.visual_rendering_engine import render_slides_to_images
-        # STRICT: Playwright not installed in test env → must raise RuntimeError
-        with pytest.raises(RuntimeError, match="Playwright is required"):
-            await render_slides_to_images(["<html></html>"], "/tmp/test_render")
+
+        if importlib.util.find_spec("playwright") is None:
+            with pytest.raises(RuntimeError, match="Playwright is required"):
+                await render_slides_to_images(["<html></html>"], tempfile.gettempdir())
+        else:
+            with tempfile.TemporaryDirectory() as tmp:
+                paths = await render_slides_to_images(
+                    ["<!DOCTYPE html><html><body>x</body></html>"], tmp
+                )
+                assert len(paths) == 1
 
 
 class TestStreamTermination:

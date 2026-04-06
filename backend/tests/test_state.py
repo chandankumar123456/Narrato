@@ -10,7 +10,7 @@ def test_state_defaults():
     assert state.tone == "professional"
     assert state.presentation_type == "general"
     assert state.language == "en"
-    assert state.image_preference is True
+    assert state.image_preference is False
     assert state.theme == "modern"
 
 

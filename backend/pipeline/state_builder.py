@@ -40,7 +40,6 @@ def build_state(signals: dict, user_schema=None) -> PresentationState:
             tone=signals.get("tone") or "professional",
             audience=signals.get("audience"),
             examples_count=n_examples,
-            image_preference=signals.get("image_preference", True),
             language=signals.get("language", "en"),
             user_schema=schema_dict,
             generation_mode="strict",
@@ -54,7 +53,6 @@ def build_state(signals: dict, user_schema=None) -> PresentationState:
         tone=signals.get("tone") or "professional",
         audience=signals.get("audience"),
         examples_count=signals.get("examples_count") or 2,
-        image_preference=signals.get("image_preference", True),
         language=signals.get("language", "en"),
         generation_mode="default",
     )

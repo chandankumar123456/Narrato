@@ -210,13 +210,25 @@ async def download(job_id: str):
             filename="narrato.pdf"
         )
 
-    # Fallback: try to find a PDF in the visual output directory
-    visual_pdf = os.path.join(VISUAL_DIR, "presentation.pdf")
-    if os.path.isfile(visual_pdf):
+    # Fallback: per-job visual dir, then legacy flat visual dir
+    try:
+        _, sid = _safe_job_dir(job_id)
+        visual_pdf = os.path.join(VISUAL_DIR, sid, "presentation.pdf")
+        if os.path.isfile(visual_pdf):
+            return FileResponse(
+                visual_pdf,
+                media_type="application/pdf",
+                filename="narrato.pdf",
+            )
+    except HTTPException:
+        pass
+
+    legacy_pdf = os.path.join(VISUAL_DIR, "presentation.pdf")
+    if os.path.isfile(legacy_pdf):
         return FileResponse(
-            visual_pdf,
+            legacy_pdf,
             media_type="application/pdf",
-            filename="narrato.pdf"
+            filename="narrato.pdf",
         )
 
     raise HTTPException(status_code=404, detail="PDF not found — rendering engine may not be available")
@@ -359,6 +371,53 @@ def _safe_job_dir(job_id: str) -> tuple[str, str]:
     return job_dir, safe_id
 
 
+async def rerender_job_visual_export(job_id: str) -> None:
+    """Re-run PNG/PDF export from on-disk slide HTML so download matches editor."""
+    job = get_job(job_id)
+    if not job or job.get("status") != "completed":
+        return
+    try:
+        job_output_dir, safe_id = _safe_job_dir(job_id)
+    except HTTPException:
+        return
+
+    html_urls = job.get("html_slides") or []
+    html_strings: list[str] = []
+    real_job = os.path.realpath(job_output_dir)
+    for url in html_urls:
+        filename = os.path.basename(url)
+        if not filename or "/" in filename or "\\" in filename or ".." in filename:
+            continue
+        filepath = os.path.realpath(os.path.join(job_output_dir, filename))
+        if not filepath.startswith(real_job):
+            continue
+        if os.path.isfile(filepath):
+            with open(filepath, encoding="utf-8") as f:
+                html_strings.append(f.read())
+
+    if not html_strings:
+        logger.warning("[export] No HTML files to re-export for job %s", job_id)
+        return
+
+    from pipeline.visual_rendering_engine import render_slides_to_images, render_slides_to_pdf
+    from pipeline.visual_export_engine import run_export_engine
+
+    visual_dir = os.path.join(settings.output_dir, "visual", safe_id)
+    os.makedirs(visual_dir, exist_ok=True)
+    try:
+        image_paths = await render_slides_to_images(html_strings, visual_dir)
+        pdf_path = await render_slides_to_pdf(html_strings, visual_dir)
+        export_result = run_export_engine(html_strings, image_paths, pdf_path, visual_dir)
+        update_job(
+            job_id,
+            pdf_path=export_result.get("pdf_path", pdf_path),
+            image_paths=export_result.get("image_paths", image_paths),
+        )
+        logger.info("[export] Re-rendered %d slides for job %s", len(html_strings), job_id)
+    except Exception:
+        logger.exception("[export] Re-render failed for job %s", job_id)
+
+
 class RegenerateSlideRequest(BaseModel):
     slide_id: int
     instruction: str = ""
@@ -431,8 +490,7 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
 
     try:
         from services.llm_client import call_llm_json
-        from pipeline.visual_design_engine import run_design_engine
-        from pipeline.visual_template_engine import run_template_engine
+        from pipeline.dynamic_composition_engine import run_dynamic_composition_engine
 
         # Use LLM to regenerate slide content based on instruction
         system_prompt = (
@@ -451,9 +509,11 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
         # Update the structured slide
         structured_slides[idx] = {**slide, "content": new_content}
 
-        # Re-run design + template for just this slide
-        designs = run_design_engine([structured_slides[idx]])
-        new_html_list = run_template_engine(designs)
+        # Re-run dynamic composition for just this slide
+        designs, new_html_list = await run_dynamic_composition_engine(
+            [structured_slides[idx]],
+            state_theme="modern"
+        )
 
         if new_html_list:
             new_html = new_html_list[0]
@@ -467,6 +527,8 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
 
             # Update job store
             update_job(job_id, structured_slides=structured_slides)
+
+            await rerender_job_visual_export(job_id)
 
             return {
                 "slide_id": req.slide_id,
@@ -494,11 +556,12 @@ async def restyle_slides(job_id: str, req: RestyleRequest):
         raise HTTPException(status_code=400, detail="No slides to restyle")
 
     try:
-        from pipeline.visual_design_engine import run_design_engine
-        from pipeline.visual_template_engine import run_template_engine
+        from pipeline.dynamic_composition_engine import run_dynamic_composition_engine
 
-        designs = run_design_engine(structured_slides, state_theme=req.theme)
-        html_slides = run_template_engine(designs)
+        designs, html_slides = await run_dynamic_composition_engine(
+            structured_slides,
+            state_theme=req.theme
+        )
 
         # Save restyled HTML slides
         job_output_dir, safe_id = _safe_job_dir(job_id)
@@ -511,6 +574,8 @@ async def restyle_slides(job_id: str, req: RestyleRequest):
             html_slide_paths.append(f"/outputs/{safe_id}/slide_{idx + 1}.html")
 
         update_job(job_id, html_slides=html_slide_paths)
+
+        await rerender_job_visual_export(job_id)
 
         return {
             "job_id": job_id,
@@ -541,15 +606,15 @@ async def update_slide(job_id: str, req: UpdateSlideRequest):
     slide = structured_slides[idx]
 
     try:
-        from pipeline.visual_design_engine import run_design_engine
-        from pipeline.visual_template_engine import run_template_engine
+        from pipeline.dynamic_composition_engine import run_dynamic_composition_engine
 
         # Update the content
         structured_slides[idx] = {**slide, "content": req.content}
 
-        # Re-render just this slide
-        designs = run_design_engine([structured_slides[idx]])
-        new_html_list = run_template_engine(designs)
+        designs, new_html_list = await run_dynamic_composition_engine(
+            [structured_slides[idx]],
+            state_theme="modern"
+        )
 
         if new_html_list:
             new_html = new_html_list[0]
@@ -560,6 +625,8 @@ async def update_slide(job_id: str, req: UpdateSlideRequest):
                 f.write(new_html)
 
             update_job(job_id, structured_slides=structured_slides)
+
+            await rerender_job_visual_export(job_id)
 
             return {
                 "slide_id": req.slide_id,
@@ -663,6 +730,8 @@ async def reorder_slides(job_id: str, req: ReorderRequest):
 
     update_job(job_id, structured_slides=new_structured, html_slides=new_html)
 
+    await rerender_job_visual_export(job_id)
+
     return {"job_id": job_id, "order": req.order, "status": "reordered"}
 
 
@@ -693,6 +762,8 @@ async def duplicate_slide(job_id: str, req: DuplicateSlideRequest):
     html_slides = _renumber_html_slides(job_id, html_slides)
 
     update_job(job_id, structured_slides=structured_slides, html_slides=html_slides)
+
+    await rerender_job_visual_export(job_id)
 
     return {
         "job_id": job_id,
@@ -728,6 +799,8 @@ async def delete_slide(job_id: str, slide_id: int):
 
     update_job(job_id, structured_slides=structured_slides, html_slides=html_slides)
 
+    await rerender_job_visual_export(job_id)
+
     return {"job_id": job_id, "deleted": slide_id, "total": len(structured_slides), "status": "deleted"}
 
 
@@ -741,13 +814,22 @@ async def get_visual_slides(job_id: str):
     if not job or job["status"] != "completed":
         raise HTTPException(status_code=404, detail="Job not completed")
 
-    # List available visual assets
-    html_files = sorted(glob.glob(os.path.join(VISUAL_DIR, "*.html")))
-    png_files = sorted(glob.glob(os.path.join(VISUAL_DIR, "*.png")))
-    pdf_files = sorted(glob.glob(os.path.join(VISUAL_DIR, "*.pdf")))
+    try:
+        _, sid = _safe_job_dir(job_id)
+    except HTTPException:
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+
+    sub = os.path.join(VISUAL_DIR, sid)
+    if not os.path.isdir(sub):
+        return {"html_slides": [], "png_slides": [], "pdf": None}
+
+    html_files = sorted(glob.glob(os.path.join(sub, "*.html")))
+    png_files = sorted(glob.glob(os.path.join(sub, "*.png")))
+    pdf_files = sorted(glob.glob(os.path.join(sub, "*.pdf")))
+    prefix = f"/visual/{sid}"
 
     return {
-        "html_slides": [f"/visual/{os.path.basename(f)}" for f in html_files],
-        "png_slides": [f"/visual/{os.path.basename(f)}" for f in png_files],
-        "pdf": f"/visual/{os.path.basename(pdf_files[0])}" if pdf_files else None,
+        "html_slides": [f"{prefix}/{os.path.basename(f)}" for f in html_files],
+        "png_slides": [f"{prefix}/{os.path.basename(f)}" for f in png_files],
+        "pdf": f"{prefix}/{os.path.basename(pdf_files[0])}" if pdf_files else None,
     }

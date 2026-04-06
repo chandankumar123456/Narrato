@@ -23,10 +23,10 @@ Narrato runs a **multi-stage AI pipeline** with built-in quality enforcement:
 3. **Multi-stage content** — generates, validates, critiques, and enforces intent per slide
 4. **Slide evaluation** — deterministic + LLM scoring with automatic regeneration
 5. **Deck consistency** — cross-slide alignment for tone, terminology, and depth
-6. **Visual rendering** — design engine → template engine → HTML slides at 1920×1080
+6. **Visual rendering** — design engine → content-aware layout variants → template engine (embedded CSS) → HTML slides at 1920×1080
 7. **Real-time streaming** — SSE events push progress and rendered slides to the UI as they complete
 
-The output is a fully styled HTML slide deck with PPTX export, not a template fill.
+The output is a fully styled HTML slide deck with PPTX export. Slides are **design-driven** (strict visual hierarchy, layout variation, transformed stats/titles) rather than a single repeated template.
 
 ---
 
@@ -41,7 +41,8 @@ The output is a fully styled HTML slide deck with PPTX export, not a template fi
 - **Intelligence report** — auto-generated evaluation of pipeline behavior per run
 - **Interactive editor** — post-generation slide editing, AI-assisted regeneration, theme switching
 - **Multi-provider LLM** — OpenAI and Anthropic with retry + backoff
-- **Multi-provider images** — Unsplash primary, Pexels fallback
+- **Presentation design layer** — per-slide rhythm (airy/standard/dense), layout variants (editorial hero, bento grid, stats spotlight, asymmetric split), and content visual transforms (e.g. mega stat + context line)
+- **Stock image queries** — optional Unsplash/Pexels queries for pipeline metadata; slide chrome is HTML + CSS (no slide image dependency)
 - **Celery + Redis** for production job queues, in-memory fallback for local dev
 
 ---
@@ -82,7 +83,7 @@ The output is a fully styled HTML slide deck with PPTX export, not a template fi
 │  │  Deck Consistency ──► Visual Queries ──► Speaker Notes    │   │
 │  │                                             │             │   │
 │  │                                             ▼             │   │
-│  │  Intelligence Report ──► Design Engine ──► Template Engine│   │
+│  │  Intelligence Report ──► Design + Transform ──► Template     │   │
 │  │                                             │             │   │
 │  │                                             ▼             │   │
 │  │                    Rendering Engine ──► Export ──► PPTX    │   │
@@ -158,17 +159,23 @@ User Prompt
 │   ├─ Bullet structure consistency
 │   └─ Targeted rewrite
 │
-├─ Visual Queries (LLM) ──► Image search queries per slide
+├─ Visual Queries (LLM) ──► Optional stock image search queries per slide
 │
 ├─ Speaker Notes (LLM) ──► Presenter notes per slide
 │
 ├─ Intelligence Report (LLM) ──► Pipeline behavior evaluation
 │
-├─ Design Engine ──► Layout + theme + components per slide
+├─ Design Engine ──► Layout + theme + components + presentation spec per slide
 │   Layouts: hero_center, grid_cards, split_left_text_right_visual,
 │            step_flow, stats_blocks, timeline_flow
+│   Each slide gets a `presentation` dict: rhythm + layout variants so
+│   adjacent slides differ in structure (not copy-paste templates).
 │
-├─ Template Engine ──► Full-screen HTML/Tailwind CSS at 1920×1080
+├─ Content Visual Transform ──► Stat splitting, title lines, kickers,
+│   split lead/support, dedupe — feeds the template with primary/secondary/tertiary tiers
+│
+├─ Template Engine ──► Full-screen HTML + embedded `slides.css` at 1920×1080
+│   (no Tailwind CDN on slides; deterministic export/editor parity)
 │
 ├─ Rendering Engine ──► Playwright PNG/PDF capture
 │
@@ -190,7 +197,7 @@ Activated when the prompt contains structured schema (e.g., "5 examples of X wit
 | Frontend | React 19, React Router 7, Tailwind CSS 4, Vite 8 | SPA with SSE streaming |
 | Backend | FastAPI, Python 3.11+, Pydantic, Uvicorn, uv | API + pipeline orchestration |
 | AI | OpenAI (GPT-4o-mini default), Anthropic Claude | Content generation + evaluation |
-| Rendering | Tailwind CDN, Playwright (optional) | HTML slides at 1920×1080, PNG/PDF |
+| Rendering | Embedded `slides.css`, Playwright (optional) | HTML slides at 1920×1080, PNG/PDF |
 | Queue | Celery + Redis (optional) | Production async job processing |
 | Storage | Redis (jobs/events), in-memory fallback | Job state + event log |
 | Images | Unsplash, Pexels | Stock image sourcing |
@@ -208,6 +215,7 @@ Activated when the prompt contains structured schema (e.g., "5 examples of X wit
 | Consistency | Per-slide only | Full-deck consistency optimizer (tone, terminology, depth) |
 | Feedback | Spinner → done | Real-time SSE: stage labels, progress %, live slide rendering |
 | Post-generation | Download only | Interactive editor with AI regeneration, theme switching, inline editing |
+| Slide visuals | One layout repeated | Varied layouts + typography scale + focal rules per slide type |
 | Architecture | Monolithic | Event-driven pipeline with decoupled stages |
 
 ---
@@ -258,11 +266,15 @@ narrato/
 │   │   ├── visual_mapper.py
 │   │   ├── speaker_notes_generator.py
 │   │   ├── intelligence_report.py
-│   │   ├── visual_design_engine.py      # Stage 1: Layout + theme
-│   │   ├── visual_template_engine.py    # Stage 2: HTML/CSS
+│   │   ├── content_visual_transform.py  # Stat/title/split transforms + presentation spec
+│   │   ├── visual_design_engine.py      # Stage 1: Layout + theme + enrichment
+│   │   ├── visual_template_engine.py    # Stage 2: HTML + embedded slides.css
 │   │   ├── visual_rendering_engine.py   # Stage 3: PNG/PDF
 │   │   ├── visual_export_engine.py      # Stage 4: File output
 │   │   ├── visual_rendering_pipeline.py # Stages 1–4 orchestrator
+│   │   ├── slide_validator.py           # Content + rendered HTML gates
+│   │   ├── static/
+│   │   │   └── slides.css               # Slide typography, layouts, themes
 │   │   └── slide_utils.py               # Shared utilities
 │   │
 │   ├── services/
@@ -369,6 +381,20 @@ cd frontend && npm run dev
 - **Backend**: Uvicorn behind nginx reverse proxy, Celery workers for async pipeline execution
 - **Scaling**: Celery workers scale horizontally; Redis handles job state + event streaming; stateless API servers behind load balancer
 - **File output**: `./outputs/` directory with job-specific subdirectories for HTML slides, previews, and PPTX files
+
+---
+
+## Slide design system
+
+Slides are generated as standalone HTML documents with **embedded** [`backend/pipeline/static/slides.css`](backend/pipeline/static/slides.css). The pipeline aims for premium-deck behavior: one clear focal element per slide (hero title, mega stat, or dominant card), secondary and tertiary tiers, and **layout variation** across the deck so outputs do not read as the same template repeated.
+
+- **`content_visual_transform.py`** — Parses and splits copy (e.g. leading percentages and multipliers like `2.3x`, `Actor` / `Action` kickers, split body lead vs support) before templating.
+- **`visual_design_engine.py`** — Maps content to layout/theme/components and attaches a per-slide `presentation` spec (rhythm + variants). **Pitch-style patterns** include: slide 1 **cover** hero; **problem** grids with a pulled-out mega stat plus intro body and three pillars; **market** slides with three dollar-denominated stats as a **TAM/SAM/SOM funnel**; optional **deck index** (`01`, `02`, …) in the corner.
+- **`visual_template_engine.py`** — Emits semantic markup (`data-rhythm`, bento grids, stats spotlight/funnel, editorial/cover hero, etc.) consumed by the CSS.
+
+Put **eyebrow + tagline** on the title slide by using a newline in `subtitle` (first line → kicker, rest → tagline). Set **`footer_note`** / **`deck_footer`** / **`confidential_note`** for a confidential line under the cover. For **problem** slides, supply **`body`** (narrative paragraph) and either structured **`stat`** + **`stat_label`** or a first bullet like `68% of students fall behind…` to drive the mega-stat row.
+
+Editor and export use the same HTML for parity. There is **no Tailwind CDN** inside slide documents.
 
 ---
 

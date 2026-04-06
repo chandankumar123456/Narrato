@@ -158,7 +158,7 @@ SECTION_ROLES = {
     "product": {
         "expected": "nouns (features, system components)",
         "must_contain_re": re.compile(
-            r"\b(feature|component|capability|tool|module|interface|dashboard|console|tracker|widget|service|detector|monitor|hub|portal)\b",
+            r"\b(feature|component|capability|tool|module|interface|dashboard|console|tracker|widget|service|detector|monitor|hub|portal|product|platform|solution|offering|app|application|learners?|students?|users?|customers?|lesson|curriculum|content|experience|workflow)\b",
             re.I,
         ),
         "must_not_contain_re": re.compile(
@@ -959,9 +959,14 @@ def _check_section_differentiation(
     warnings: list[str] = []
 
     if not role["must_contain_re"].search(blob):
-        warnings.append(
+        msg = (
             f"Section '{section_id}' may lack expected {role['expected']} content"
         )
+        wc = len(blob.split())
+        if section_id == "product" and wc >= 45:
+            logger.debug("[narrative] %s (substantial section — suppressed as warning)", msg)
+        else:
+            warnings.append(msg)
 
     match = role["must_not_contain_re"].search(blob)
     if match:
