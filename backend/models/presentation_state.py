@@ -41,6 +41,7 @@ class PresentationState(BaseModel):
     output_path: Optional[str] = None
     design_theme: Optional[str] = None
     metadata: Optional[dict] = None
+    narrative_arc: Optional[list[dict]] = None
 
     # Strict mode fields
     user_schema: Optional[dict] = None

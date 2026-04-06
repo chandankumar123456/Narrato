@@ -22,7 +22,14 @@ async def main():
     }
     
     print("Testing generate_slide_html...")
-    design, html = await generate_slide_html(slide_data, 0, "dark")
+    theme_dict = {
+        "background": "dark",
+        "primary_color": "vibrant blue",
+        "font_scale": "massive headers",
+        "spacing_scale": "cozy"
+    }
+    continuity_context = {"global_keywords": [], "entities": []}
+    design, html, context = await generate_slide_html(slide_data, 0, theme_dict, continuity_context)
     
     print("\n--- DESIGN SPEC ---")
     print(design)

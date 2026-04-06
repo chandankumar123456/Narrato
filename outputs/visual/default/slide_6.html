@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=1920,height=1080"/>
+<title>Slide</title>
+<style>
+/*
+ * Narrato slide stylesheet — deterministic, no Tailwind, no external assets.
+ * Themes: data-theme on .slide (dark_modern | minimal_light | bold_gradient)
+ */
+
+/* ── Reset & base ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", sans-serif;
+}
+
+.slide {
+  width: 1920px;
+  height: 1080px;
+  position: relative;
+  overflow: hidden;
+}
+
+.slide-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 5.5rem 6rem 3rem;
+}
+
+/* Pitch-deck index (reference: corner slide numbers) */
+.slide-deck-index {
+  position: absolute;
+  right: 3.5rem;
+  bottom: 2.75rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  opacity: 0.85;
+  z-index: 2;
+}
+
+/* Deck rhythm — vary density so slides do not feel cloned */
+.slide-frame[data-rhythm="airy"] {
+  padding: 6.5rem 7rem 4rem;
+}
+.slide-frame[data-rhythm="dense"] {
+  padding: 4.25rem 5rem 2.5rem;
+}
+.slide-frame[data-rhythm="standard"] {
+  padding: 5.5rem 6rem 3rem;
+}
+
+/* Design-decision hooks: stronger hero dominance, calmer support copy */
+.slide-frame[data-hero-emphasis="title_dominant"] .layout-hero .slide-title-display {
+  font-size: clamp(5.25rem, 7.5vw, 7.5rem);
+  max-width: 22ch;
+}
+.slide-frame[data-hero-emphasis="title_dominant"] .layout-hero .slide-subtitle-hero {
+  font-size: 1.2rem;
+  max-width: 36rem;
+  opacity: 0.9;
+}
+.slide-frame[data-hero-emphasis="title_dominant"] .layout-hero .slide-kicker {
+  margin-bottom: 2.5rem;
+}
+
+/* Stats: extra separation when content-driven spotlight is active */
+.slide-frame[data-stats-layout="spotlight"] .layout-stats--spotlight {
+  gap: 2.5rem;
+}
+.slide-frame[data-stats-layout="spotlight"] .stat-spotlight-block {
+  padding-bottom: 0.5rem;
+}
+
+/* Grid: bento focal reads larger vs stack */
+.slide-frame[data-grid-layout="bento"] .card--focal.card--bento-hero {
+  box-shadow: var(--card-shadow), var(--accent-glow);
+}
+.slide-frame[data-grid-layout="bento"] .card--bento-small {
+  opacity: 0.95;
+}
+
+/* ── Theme: dark_modern ───────────────────────────────────────────── */
+.slide[data-theme="dark_modern"] {
+  background: linear-gradient(145deg, #000000 0%, #0a0a0f 45%, #111827 100%);
+  color: #ffffff;
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.72);
+  --text-muted: rgba(255, 255, 255, 0.42);
+  --card-bg: rgba(255, 255, 255, 0.07);
+  --card-border: rgba(255, 255, 255, 0.12);
+  --card-shadow: 0 25px 50px -12px rgba(139, 92, 246, 0.12);
+  --card-highlight-bg: rgba(255, 255, 255, 0.11);
+  --card-highlight-border: rgba(255, 255, 255, 0.2);
+  --accent: #c4b5fd;
+  --accent-line: linear-gradient(90deg, #a855f7, #ec4899);
+  --accent-glow: 0 10px 40px rgba(168, 85, 247, 0.2);
+  --title-grad: linear-gradient(90deg, #ffffff 0%, #e9d5ff 45%, #c4b5fd 100%);
+  --stat-color: #c4b5fd;
+  --step-bg: linear-gradient(135deg, #a855f7, #ec4899);
+  --step-connector: linear-gradient(180deg, rgba(168, 85, 247, 0.55), transparent);
+  --divider: rgba(255, 255, 255, 0.12);
+  --visual-mesh: radial-gradient(ellipse 80% 60% at 70% 40%, rgba(168, 85, 247, 0.25), transparent 55%),
+                  radial-gradient(ellipse 50% 50% at 30% 80%, rgba(236, 72, 153, 0.15), transparent 50%);
+}
+
+/* ── Theme: minimal_light ─────────────────────────────────────────── */
+.slide[data-theme="minimal_light"] {
+  background: linear-gradient(160deg, #ffffff 0%, #f9fafb 50%, #e2e8f0 100%);
+  color: #111827;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --card-bg: #ffffff;
+  --card-border: rgba(229, 231, 235, 0.9);
+  --card-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.08);
+  --card-highlight-bg: rgba(238, 242, 255, 0.95);
+  --card-highlight-border: rgba(199, 210, 254, 0.8);
+  --accent: #4f46e5;
+  --accent-line: linear-gradient(90deg, #6366f1, #8b5cf6);
+  --accent-glow: 0 10px 30px rgba(99, 102, 241, 0.15);
+  --title-grad: linear-gradient(90deg, #111827 0%, #312e81 40%, #4f46e5 100%);
+  --stat-color: #4f46e5;
+  --step-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --step-connector: linear-gradient(180deg, rgba(99, 102, 241, 0.4), transparent);
+  --divider: #e5e7eb;
+  --visual-mesh: radial-gradient(ellipse 70% 50% at 75% 35%, rgba(99, 102, 241, 0.12), transparent 50%),
+                  radial-gradient(ellipse 40% 40% at 20% 70%, rgba(139, 92, 246, 0.08), transparent 50%);
+}
+
+/* ── Theme: bold_gradient ─────────────────────────────────────────── */
+.slide[data-theme="bold_gradient"] {
+  background: linear-gradient(145deg, #1e1b4b 0%, #581c87 50%, #9d174d 100%);
+  color: #ffffff;
+  --text-primary: #ffffff;
+  --text-secondary: rgba(252, 231, 243, 0.85);
+  --text-muted: rgba(251, 207, 232, 0.45);
+  --card-bg: rgba(255, 255, 255, 0.1);
+  --card-border: rgba(255, 255, 255, 0.15);
+  --card-shadow: 0 25px 50px -12px rgba(236, 72, 153, 0.15);
+  --card-highlight-bg: rgba(255, 255, 255, 0.16);
+  --card-highlight-border: rgba(255, 255, 255, 0.28);
+  --accent: #fbcfe8;
+  --accent-line: linear-gradient(90deg, #f472b6, #fbbf24);
+  --accent-glow: 0 10px 40px rgba(244, 114, 182, 0.25);
+  --title-grad: linear-gradient(90deg, #ffffff 0%, #fce7f3 40%, #fde68a 100%);
+  --stat-color: #fbcfe8;
+  --step-bg: linear-gradient(135deg, #ec4899, #f59e0b);
+  --step-connector: linear-gradient(180deg, rgba(244, 114, 182, 0.5), transparent);
+  --divider: rgba(255, 255, 255, 0.15);
+  --visual-mesh: radial-gradient(ellipse 75% 55% at 65% 45%, rgba(244, 114, 182, 0.3), transparent 55%),
+                  radial-gradient(ellipse 45% 45% at 25% 75%, rgba(251, 191, 36, 0.12), transparent 50%);
+}
+
+/* ── Typography scale (hierarchy) ──────────────────────────────────── */
+.slide-title-display {
+  margin: 0;
+  font-size: 6rem;
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  background: var(--title-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  max-width: 20ch;
+}
+
+.slide-title-display .title-line {
+  display: block;
+}
+
+.slide-title-display .title-line--primary {
+  font-size: 1em;
+  font-weight: 800;
+}
+
+.slide-title-display .title-line--secondary {
+  font-size: 0.58em;
+  font-weight: 700;
+  margin-top: 0.2em;
+  opacity: 0.92;
+  letter-spacing: -0.02em;
+}
+
+/* Tertiary: narrative metadata (Actor / Action) */
+.slide-kicker {
+  margin-bottom: 2rem;
+  max-width: 48rem;
+}
+
+.slide-kicker .kicker-line {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.slide-kicker .kicker-line + .kicker-line {
+  margin-top: 0.35rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
+.slide[data-theme="minimal_light"] .slide-title-display {
+  color: #111827;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  background: var(--title-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.slide-subtitle-hero {
+  margin: 2.25rem auto 0;
+  max-width: 38rem;
+  font-size: 1.35rem;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.slide-title-section {
+  margin: 0;
+  font-size: 3.5rem;
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  line-height: 1.08;
+  background: var(--title-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.slide-title-section--stats {
+  font-size: 2.75rem;
+  max-width: 18ch;
+}
+
+.slide[data-theme="minimal_light"] .slide-title-section {
+  background: var(--title-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.slide-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.slide-body {
+  font-size: 1.25rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.slide-body-lg {
+  font-size: 1.35rem;
+  line-height: 1.55;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.slide-body-sm {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--stat-color);
+}
+
+.stat-value--lead {
+  font-size: 5rem;
+  line-height: 0.95;
+}
+
+.stat-value--mega {
+  font-size: clamp(5.5rem, 12vw, 9rem);
+  line-height: 0.9;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: var(--stat-color);
+  text-shadow: 0 4px 48px rgba(168, 85, 247, 0.15);
+}
+
+.stat-label-mega {
+  margin-top: 1.25rem;
+  font-size: 1.65rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text-primary);
+  max-width: 28ch;
+}
+
+.stat-spotlight-context {
+  margin: 1rem 0 0;
+  font-size: 1rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.stat-label-context {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.stat-value--support {
+  font-size: 3rem;
+  line-height: 1.1;
+}
+
+.stat-label {
+  color: var(--text-secondary);
+}
+
+.stat-label--lead {
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.stat-label--support {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+/* ── Accents (scarce — one primary bar per region) ─────────────────── */
+.accent-bar {
+  width: 4rem;
+  height: 0.35rem;
+  border-radius: 9999px;
+  background: var(--accent-line);
+}
+
+.accent-bar--sm {
+  width: 2.5rem;
+  height: 0.2rem;
+  opacity: 0.45;
+}
+
+.section-head {
+  margin-bottom: 3.5rem;
+}
+
+.section-head--compact {
+  margin-bottom: 2.25rem;
+}
+
+.section-head--stats {
+  margin-bottom: 2rem;
+}
+
+.section-head .accent-bar {
+  margin-bottom: 1.5rem;
+}
+
+/* ── Layout: hero ─────────────────────────────────────────────────── */
+.layout-hero {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.layout-hero-inner {
+  text-align: center;
+  max-width: 58rem;
+  margin: 0 auto;
+}
+
+.layout-hero--statement .layout-hero-inner {
+  text-align: center;
+}
+
+.layout-hero--editorial .layout-hero-inner {
+  text-align: left;
+  margin-left: 0;
+  margin-right: auto;
+  max-width: 52rem;
+}
+
+.layout-hero--editorial .slide-title-display {
+  max-width: 16ch;
+  font-size: 5.25rem;
+}
+
+.layout-hero--editorial .slide-subtitle-hero {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 36rem;
+}
+
+.layout-hero .accent-bar {
+  margin: 0 auto 2.5rem;
+}
+
+.layout-hero--editorial .accent-bar--side {
+  margin: 0 0 2rem 0;
+  width: 5rem;
+  height: 0.4rem;
+}
+
+.hero-accent-terminator {
+  margin-top: 3rem;
+}
+
+.layout-hero .accent-bar--bottom {
+  margin: 3rem auto 0;
+}
+
+/* Pitch cover — Learnly-style title slide: eyebrow, brand, tagline, confidential footer */
+.layout-hero--cover {
+  align-items: center;
+  justify-content: center;
+}
+
+.layout-hero-inner--cover {
+  text-align: center;
+  max-width: 52rem;
+}
+
+.layout-hero--cover .slide-kicker {
+  margin-bottom: 2.5rem;
+}
+
+.layout-hero--cover .slide-kicker .kicker-line {
+  font-size: 0.75rem;
+  letter-spacing: 0.22em;
+  color: var(--text-muted);
+}
+
+.slide-title-display--cover {
+  font-size: clamp(4.5rem, 8vw, 7rem);
+  max-width: 16ch;
+  margin: 0 auto;
+}
+
+.slide-subtitle-hero--cover {
+  margin: 2rem auto 0;
+  max-width: 36rem;
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.slide-cover-footer {
+  margin: 3.5rem auto 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ── Layout: grid cards ─────────────────────────────────────────────── */
+.layout-grid {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 1.25rem;
+  padding: 2rem;
+  box-shadow: var(--card-shadow);
+}
+
+.card--focal {
+  grid-column: span 2;
+  background: var(--card-highlight-bg);
+  border-color: var(--card-highlight-border);
+  border-radius: 1.75rem;
+  padding: 2.5rem;
+  box-shadow: var(--card-shadow), var(--accent-glow);
+}
+
+.card--focal .accent-bar {
+  margin-bottom: 1.5rem;
+}
+
+.card-headline {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.card-support {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.card-body-unified {
+  margin: 0;
+}
+
+.card--support {
+  opacity: 0.96;
+}
+
+/* Bento: one dominant panel + stacked satellites */
+.grid-cards--bento {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 1.75rem;
+  align-items: stretch;
+  min-height: 28rem;
+}
+
+.card--bento-hero {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 3rem 3.25rem;
+  border-radius: 2rem;
+}
+
+.bento-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.card--bento-small {
+  flex: 1;
+  padding: 1.5rem 1.75rem;
+  border-radius: 1.25rem;
+}
+
+.grid-intro-paragraph {
+  margin: 0 0 2rem;
+  max-width: 52rem;
+  font-size: 1.2rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+/* Problem slide — mega stat + narrative + three equal pillars (reference decks) */
+.layout-grid--problem .section-head--problem {
+  margin-bottom: 2rem;
+}
+
+.accent-bar--problem {
+  width: 3rem;
+  height: 0.28rem;
+  opacity: 0.9;
+}
+
+.slide-title-section--problem {
+  font-size: 2.75rem;
+}
+
+.problem-stat-row {
+  margin: 0 0 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  max-width: 56rem;
+}
+
+.problem-stat-value {
+  font-size: clamp(4.25rem, 9vw, 7rem);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 0.92;
+  color: var(--stat-color);
+}
+
+.problem-stat-label {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+  max-width: 24ch;
+}
+
+.problem-stat-context {
+  width: 100%;
+  font-size: 1rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 0.25rem;
+}
+
+.layout-grid--problem .grid-intro-paragraph {
+  margin-bottom: 2.25rem;
+}
+
+.grid-cards--problem-pillars {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.35rem;
+}
+
+.card--problem-pillar {
+  padding: 1.75rem 1.5rem;
+  border-radius: 1.15rem;
+}
+
+.card--problem-pillar .card-headline {
+  font-size: 1.2rem;
+}
+
+.card--problem-pillar .slide-body-lg,
+.card--problem-pillar .card-support {
+  font-size: 0.98rem;
+}
+
+/* ── Layout: stats ────────────────────────────────────────────────── */
+.layout-stats {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.stat-cell {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 1.25rem;
+  padding: 2rem;
+  text-align: center;
+  box-shadow: var(--card-shadow);
+}
+
+.stat-cell--lead {
+  grid-column: span 2;
+  background: var(--card-highlight-bg);
+  border-color: var(--card-highlight-border);
+  border-radius: 1.75rem;
+  padding: 2.5rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--card-shadow), var(--accent-glow);
+}
+
+.stat-cell--lead::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--accent-line);
+}
+
+.stat-cell--lead .stat-value { margin-bottom: 1rem; }
+
+.layout-stats--spotlight .stat-spotlight-block {
+  margin-bottom: 2.5rem;
+  padding: 2rem 0 2.5rem;
+  border-bottom: 1px solid var(--divider);
+}
+
+.stats-support-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+
+.stats-support-row .stat-cell--support {
+  text-align: left;
+  padding: 1.5rem 1.75rem;
+}
+
+.stats-support-row .stat-value--support {
+  font-size: 2.25rem;
+}
+
+/* Market funnel — TAM / SAM / SOM descending emphasis */
+.layout-stats--funnel .stats-funnel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  max-width: 48rem;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.stat-funnel-tier {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--divider);
+}
+
+.stat-funnel-tier:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.stat-funnel-value {
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  color: var(--stat-color);
+}
+
+.stat-funnel-tier--tam .stat-funnel-value {
+  font-size: clamp(3.75rem, 7vw, 5.5rem);
+}
+
+.stat-funnel-tier--sam .stat-funnel-value {
+  font-size: clamp(3rem, 5.5vw, 4.25rem);
+  opacity: 0.95;
+}
+
+.stat-funnel-tier--som .stat-funnel-value {
+  font-size: clamp(2.5rem, 4.5vw, 3.25rem);
+  opacity: 0.9;
+}
+
+.stat-funnel-label {
+  margin-top: 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+  max-width: 36ch;
+}
+
+.stat-funnel-context {
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.stats-funnel-foot {
+  margin-top: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.stats-funnel-foot .stat-cell--support {
+  flex: 1 1 200px;
+  max-width: 280px;
+}
+
+/* ── Layout: split (text + visual panel, no image) ────────────────── */
+.layout-split {
+  display: flex;
+  width: 100%;
+  max-width: 80rem;
+  margin: 0 auto;
+  gap: 4rem;
+  flex: 1;
+  align-items: center;
+}
+
+.split-left {
+  flex: 1;
+  max-width: 36rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.split-left .accent-bar {
+  margin-bottom: 2rem;
+}
+
+.split-left .slide-title-section {
+  margin-bottom: 1.5rem;
+}
+
+.layout-split--asymmetric .split-left--primary {
+  flex: 1.15;
+  max-width: 40rem;
+}
+
+.layout-split--asymmetric .split-right--secondary {
+  flex: 0.9;
+}
+
+.split-body-lead {
+  margin: 0 0 1rem;
+  font-size: 1.85rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.split-body-support {
+  margin: 0 0 1.5rem;
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.split-body-unified {
+  margin-bottom: 1.25rem;
+}
+
+.split-bullet-list--tertiary li {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.split-bullet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.split-bullet-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  font-size: 1.125rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.split-bullet-list .bullet-dot {
+  color: var(--accent);
+  font-size: 1.25rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.split-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22rem;
+}
+
+.split-visual {
+  width: 100%;
+  max-width: 36rem;
+  min-height: 24rem;
+  border-radius: 1.75rem;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  padding: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.split-visual::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--visual-mesh);
+  pointer-events: none;
+}
+
+.split-visual-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+}
+
+.mini-card {
+  background: var(--card-highlight-bg);
+  border: 1px solid var(--card-highlight-border);
+  border-radius: 1rem;
+  padding: 1.25rem 1.5rem;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  box-shadow: var(--accent-glow);
+}
+
+.mini-card--quote {
+  font-size: 1.15rem;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--text-primary);
+  border-left: 4px solid transparent;
+  border-image: var(--accent-line) 1;
+  border-left-width: 4px;
+  border-image-slice: 1;
+}
+
+.visual-abstract {
+  flex: 1;
+  min-height: 10rem;
+  border-radius: 1.25rem;
+  background: var(--visual-mesh), var(--card-bg);
+  border: 1px dashed var(--card-border);
+}
+
+/* ── Layout: step flow ──────────────────────────────────────────────── */
+.layout-steps {
+  width: 100%;
+  max-width: 64rem;
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.steps-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-card {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  border-radius: 1.25rem;
+  padding: 1.75rem;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+
+.step-card--focal {
+  background: var(--card-highlight-bg);
+  border-color: var(--card-highlight-border);
+  box-shadow: var(--card-shadow), var(--accent-glow);
+}
+
+.step-num {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  background: var(--step-bg);
+  border-radius: 0.75rem;
+  box-shadow: var(--accent-glow);
+}
+
+.step-num--lg {
+  width: 3.5rem;
+  height: 3.5rem;
+  font-size: 1.25rem;
+}
+
+.step-num--sm {
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.05rem;
+}
+
+.step-connector {
+  width: 2px;
+  height: 1.5rem;
+  margin: 0 auto;
+  background: var(--step-connector);
+}
+
+.steps-stack--rail {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.steps-stack--rail .step-row {
+  flex: 1 1 calc(50% - 1rem);
+  min-width: 280px;
+}
+
+.steps-stack--rail .step-connector {
+  display: none;
+}
+
+.step-text-lead {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.step-text-support {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.step-card--support {
+  opacity: 0.95;
+}
+
+/* ── Layout: timeline ──────────────────────────────────────────────── */
+.layout-timeline {
+  width: 100%;
+  max-width: 56rem;
+  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.timeline-stack {
+  display: flex;
+  flex-direction: column;
+  padding-left: 1rem;
+}
+
+.timeline-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2rem;
+}
+
+.timeline-spine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 0.5rem;
+}
+
+.timeline-node {
+  border-radius: 9999px;
+  flex-shrink: 0;
+  background: var(--step-bg);
+  box-shadow: var(--accent-glow);
+}
+
+.timeline-node--lg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.timeline-node--sm {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.timeline-line {
+  width: 2px;
+  flex: 1;
+  min-height: 2rem;
+  background: var(--accent-line);
+  opacity: 0.35;
+}
+
+.timeline-date {
+  display: inline-block;
+  color: #fff;
+  background: var(--step-bg);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 1rem;
+  border-radius: 9999px;
+  margin-bottom: 0.75rem;
+}
+
+.timeline-text--lead {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.timeline-text {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.timeline-body {
+  padding-bottom: 2.5rem;
+}
+
+.timeline-text--featured {
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.layout-timeline--featured .timeline-row:first-child .timeline-body {
+  padding-bottom: 3rem;
+}
+
+</style>
+<style>.slide{position:relative;width:100%;height:100%;overflow:hidden;background:linear-gradient(135deg,#f7f9fc 0%,#eef3f8 100%);font-family:Inter,Segoe UI,Arial,sans-serif;color:#102033;}
+.accent{position:absolute;right:-10%;top:-12%;width:38%;height:38%;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(53,104,255,.18),rgba(53,104,255,0) 68%);filter:blur(.15rem);}
+.content{position:relative;height:100%;padding:6% 7%;}
+.eyebrow{font-size:.88rem;letter-spacing:.14em;text-transform:uppercase;color:#5b6b82;max-width:22rem;opacity:.9;}
+.hero-wrap{position:absolute;left:7%;top:33%;max-width:58%;}
+.hero{font-size:clamp(3.6rem,7vw,7.2rem);line-height:.92;font-weight:800;letter-spacing:-.06em;color:#0f1726;text-wrap:balance;}
+.support{position:absolute;right:8%;font-size:1rem;line-height:1.2;color:#31445d;max-width:14rem;padding-left:1rem;border-left:.18rem solid rgba(53,104,255,.35);}
+.support-top{top:28%;}
+.support-mid{top:45%;}
+.support-low{top:62%;}
+@media (max-width: 700px){.hero-wrap{max-width:80%;top:30%;}.support{right:7%;max-width:11rem;font-size:.92rem;}.support-top{top:58%;}.support-mid{top:69%;}.support-low{top:80%;}.eyebrow{max-width:70%;}}</style>
+</head>
+<body>
+<div class="slide" data-theme="modern">
+<div class="slide">
+  <div class="accent"></div>
+
+  <div class="content">
+    <div class="eyebrow">Saves time • Raises quality • Improves consistency</div>
+
+    <div class="hero-wrap">
+      <div class="hero">Time down.<br>Quality up.</div>
+    </div>
+
+    <div class="support support-top">Draft-to-deck: minutes</div>
+    <div class="support support-mid">Every slide aligned</div>
+    <div class="support support-low">More decks, less rework</div>
+  </div>
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,107 @@
+{
+  "job_id": "11410a68024e44f6a66b7a08962f07de",
+  "slides": [
+    {
+      "slide_id": 1,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_1.html",
+      "content": {
+        "title": "Can machines think?",
+        "punchline": "AI began as a question — not a product.",
+        "subtext": "A bold idea: make intelligence mechanical."
+      },
+      "type": "content_slide"
+    },
+    {
+      "slide_id": 2,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_2.html",
+      "content": {
+        "title": "The first conditions",
+        "punchline": "Mathematics. Logic. Digital computers.",
+        "subtext": "The question became possible when machines could calculate."
+      },
+      "type": "content_slide"
+    },
+    {
+      "slide_id": 3,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_3.html",
+      "content": {
+        "title": "A field is born",
+        "punchline": "Speculation turned into a research discipline.",
+        "subtext": "Artificial intelligence got a name, a scope, and a mission."
+      },
+      "type": "content_slide"
+    },
+    {
+      "slide_id": 4,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_4.html",
+      "content": {
+        "title": "The first wall",
+        "punchline": "Big promises. Small machines.",
+        "subtext": "Computing power and data were nowhere near enough."
+      },
+      "type": "content_slide"
+    },
+    {
+      "slide_id": 5,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_5.html",
+      "content": {
+        "title": "AI winter",
+        "punchline": "Optimism rose. Results lagged. Funding fell.",
+        "subtext": "The same cycle repeated until the field froze."
+      },
+      "type": "content_slide"
+    },
+    {
+      "slide_id": 6,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_6.html",
+      "content": {
+        "title": "A different path",
+        "punchline": "Machine learning replaced rigid rules.",
+        "subtext": "Progress returned by chasing patterns, not hand-coded logic."
+      },
+      "type": "content_slide"
+    },
+    {
+      "slide_id": 7,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_7.html",
+      "content": {
+        "title": "The real shift",
+        "punchline": "AI learned from data instead of being told everything.",
+        "subtext": "That changed what machines could do."
+      },
+      "type": "content_slide"
+    },
+    {
+      "slide_id": 8,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_8.html",
+      "content": {
+        "title": "Modern AI stack",
+        "punchline": "Data + algorithms + computing scale.",
+        "subtext": "Enough of all three turns theory into working systems."
+      },
+      "type": "content_slide"
+    },
+    {
+      "slide_id": 9,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_9.html",
+      "content": {
+        "title": "Everyday reach",
+        "punchline": "Search. Recommendations. Translation. Medicine. Creative tools.",
+        "subtext": "AI moved from lab concept to daily infrastructure."
+      },
+      "type": "content_slide"
+    },
+    {
+      "slide_id": 10,
+      "html_url": "/outputs/11410a68024e44f6a66b7a08962f07de/slide_10.html",
+      "content": {
+        "title": "The arc",
+        "punchline": "From theory to everyday infrastructure.",
+        "subtext": "That is the history of AI."
+      },
+      "type": "content_slide"
+    }
+  ],
+  "status": "completed",
+  "total": 10
+}

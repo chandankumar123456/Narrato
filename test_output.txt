@@ -1,0 +1,83 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\Chandan Kumar\Documents\Narrato
+configfile: pyproject.toml
+plugins: anyio-3.7.1, Faker-20.1.0, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 191 items
+
+backend\tests\test_deck_consistency.py ..............................    [ 15%]
+backend\tests\test_multi_stage_pipeline.py .....................         [ 26%]
+backend\tests\test_narrative_generator.py .............................. [ 42%]
+......................                                                   [ 53%]
+backend\tests\test_slide_evaluator.py .................................. [ 71%]
+...                                                                      [ 73%]
+backend\tests\test_state.py F....                                        [ 75%]
+backend\tests\test_strict_pipeline.py .................................. [ 93%]
+.........F..                                                             [100%]
+
+================================== FAILURES ===================================
+_____________________________ test_state_defaults _____________________________
+
+    def test_state_defaults():
+        state = PresentationState(topic="Test Topic")
+        assert state.topic == "Test Topic"
+        assert state.slide_count == 10
+        assert state.tone == "professional"
+        assert state.presentation_type == "general"
+        assert state.language == "en"
+>       assert state.image_preference is False
+               ^^^^^^^^^^^^^^^^^^^^^^
+
+backend\tests\test_state.py:13: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = PresentationState(topic='Test Topic', presentation_type='general', language='en', slide_count=10, min_slides=5, max_sl...=None, narrative_arc=None, user_schema=None, generation_mode=None, intelligence_report=None, visual_render_output=None)
+item = 'image_preference'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'PresentationState' object has no attribute 'image_preference'
+
+..\..\AppData\Local\Programs\Python\Python311\Lib\site-packages\pydantic\main.py:1026: AttributeError
+_________ TestDefaultModePreserved.test_default_pipeline_still_works __________
+
+self = <backend.tests.test_strict_pipeline.TestDefaultModePreserved object at 0x0000021E2A3BE910>
+
+    def test_default_pipeline_still_works(self):
+        """The default planner still works for default-mode states."""
+        from pipeline.slide_planner import plan_slides
+>       from pipeline.slide_type_assigner import assign_slide_types
+E       ModuleNotFoundError: No module named 'pipeline.slide_type_assigner'
+
+backend\tests\test_strict_pipeline.py:487: ModuleNotFoundError
+=========================== short test summary info ===========================
+FAILED backend/tests/test_state.py::test_state_defaults - AttributeError: 'Pr...
+FAILED backend/tests/test_strict_pipeline.py::TestDefaultModePreserved::test_default_pipeline_still_works
+======================= 2 failed, 189 passed in 18.18s ========================

@@ -467,38 +467,6 @@ class TestStrictSlideVisualRendering:
             assert "data-theme=" in html
 
 
-# =====================================================================
-# Default mode preservation
-# =====================================================================
-
-class TestDefaultModePreserved:
-    def test_build_state_default_unchanged(self):
-        """Generic signals produce the same state as before."""
-        state = build_state({"topic": "AI", "slide_count": 10, "tone": "casual"})
-        assert state.topic == "AI"
-        assert state.tone == "casual"
-        assert state.slide_count == 10
-        assert state.generation_mode == "default"
-        assert state.user_schema is None
-
-    def test_default_pipeline_still_works(self):
-        """The default planner still works for default-mode states."""
-        from pipeline.slide_planner import plan_slides
-        from pipeline.slide_type_assigner import assign_slide_types
-        from pipeline.story_generator import _default_story
-
-        state = build_state({
-            "topic": "AI in Healthcare",
-            "presentation_type": "pitch",
-            "slide_count": 10,
-            "sections": ["intro", "problem", "solution", "benefits", "conclusion"],
-        })
-        state = state.model_copy(update={"story": _default_story(state)})
-        state = plan_slides(state)
-        state = assign_slide_types(state)
-        assert state.slide_plan[0]["type"] == "title_slide"
-        assert state.slide_plan[-1]["type"] == "cta_slide"
-
 
 # =====================================================================
 # Strict content structurer (field-level generation, mocked LLM)

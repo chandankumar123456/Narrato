@@ -79,17 +79,31 @@ def validate_slide_content(slides: list[dict]) -> list[dict]:
             )
             continue
 
-        title = content.get("title", "")
-        if not title:
-            violations.append(f"Slide {slide_id} ({slide_type}): missing title")
+        title = str(content.get("title", "")).strip()
+        primary_element = str(content.get("primary_element", "")).strip()
+        
+        if not title and not primary_element:
+            violations.append(f"Slide {slide_id} ({slide_type}): missing meaningful title and primary_element")
 
         # At least one content field beyond title (except whitelisted minimal slides)
-        content_keys = {k for k, v in content.items() if k != "title" and _is_non_empty(v)}
-        if not content_keys and str(slide_type).lower() not in _TITLE_ONLY_SLIDE_TYPES:
+        content_keys = {k for k, v in content.items() if k not in ("title", "primary_element") and _is_non_empty(v)}
+        
+        is_hero_or_title = str(slide_type).lower() in _TITLE_ONLY_SLIDE_TYPES
+        if not content_keys and not is_hero_or_title:
             violations.append(
                 f"Slide {slide_id} ({slide_type}): has title but no content body — "
                 f"all fields besides title are empty. Keys: {list(content.keys())}"
             )
+            
+        # Support element checking for pipeline content if it exists
+        supporting_elements = content.get("supporting_elements", [])
+        if "supporting_elements" in content and not is_hero_or_title:
+            if not isinstance(supporting_elements, list) or len(supporting_elements) == 0:
+                violations.append(f"Slide {slide_id} ({slide_type}): explicitly missing supporting_elements on non-initial slide.")
+            else:
+                for idx, sup in enumerate(supporting_elements):
+                    if len(str(sup).split()) <= 2:
+                        violations.append(f"Slide {slide_id} ({slide_type}): supporting_elements[{idx}] is too short or empty: '{sup}'")
 
     if violations:
         for v in violations:
@@ -206,6 +220,11 @@ _CONTENT_MARKERS = (
     "mini-card",
     "step-card",
     "timeline-text",
+    "<h1",
+    "<h2",
+    "<h3",
+    "<div class=\"",
+    "<span",
 )
 
 

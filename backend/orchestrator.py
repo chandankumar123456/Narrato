@@ -16,7 +16,8 @@ from pipeline.prompt_understanding import parse_prompt
 from pipeline.schema_parser import parse_user_schema
 from pipeline.state_builder import build_state
 from pipeline.state_completion import complete_state
-from pipeline.narrative_generator import generate_narrative
+from pipeline.narrative_engine import run_narrative_engine
+from pipeline.content_engine import run_content_engine
 from pipeline.strict_slide_planner import plan_slides_strict
 from pipeline.strict_content_structurer import generate_strict_content
 from pipeline.content_validator import validate_content
@@ -172,12 +173,21 @@ async def run_pipeline(prompt: str, options: dict = {},
         _emit(EventType.STAGE_UPDATE, "state_complete", "Building narrative arc…",
               _compute_progress(completed_steps, total_steps))
 
-        # CRITICAL: Generate FULL narrative in ONE LLM call
+        # CRITICAL: Generate Narrative Arc & Flow in ONE LLM call
         try:
-            state = await generate_narrative(state)
+            state = await run_narrative_engine(state)
         except Exception as exc:
-            logger.warning("[pipeline] narrative_generation failed: %s — pipeline will continue with fallback", exc)
-            # Never fail the pipeline at narrative stage — use fallback slides
+            logger.warning("[pipeline] narrative_engine failed: %s — pipeline will continue with fallback arc", exc)
+
+        completed_steps += 1
+        _emit(EventType.STAGE_UPDATE, "narrative_arc", "Narrative flow generated…",
+              _compute_progress(completed_steps, total_steps))
+
+        # CRITICAL: Map Narrative Arc into compressed Slide Content
+        try:
+            state = await run_content_engine(state)
+        except Exception as exc:
+            logger.warning("[pipeline] content_engine failed: %s — pipeline will continue with fallback", exc)
             if not state.structured_slides:
                 logger.warning("[pipeline] No slides generated — injecting minimal fallback")
                 state = _inject_fallback_slides(state)
@@ -221,14 +231,12 @@ async def run_pipeline(prompt: str, options: dict = {},
 
     designs, all_html_slides = await run_dynamic_composition_engine(
         slides,
-        state_theme=theme
+        state_theme=theme,
+        topic=state.topic,
     )
 
-    # Optional: validate design components if needed
-    try:
-        designs = validate_design_components(designs)
-    except Exception as exc:
-        logger.warning("[pipeline] validation warning, ignoring: %s", exc)
+    # STRICT: validate design components — pipeline stops on failure
+    designs = validate_design_components(designs)
 
     for idx, slide in enumerate(slides):
         slide_num = idx + 1

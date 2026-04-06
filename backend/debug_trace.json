@@ -1,0 +1,214 @@
+[
+  {
+    "slide": 1,
+    "intent": "hero",
+    "raw_content": {
+      "title": "AI Revolution",
+      "subtitle": "How AI is changing the world.",
+      "body": "It's growing."
+    },
+    "raw_llm_preprocess": {
+      "intent": "hero",
+      "title": "AI Revolution",
+      "primary_element": "AI Revolution",
+      "supporting_elements": [
+        "How AI is changing the world.",
+        "It\u2019s growing."
+      ],
+      "entities": [
+        "AI",
+        "revolution",
+        "world"
+      ]
+    },
+    "after_fallback": {
+      "intent": "hero",
+      "title": "AI Revolution",
+      "primary_element": "AI Revolution",
+      "supporting_elements": [
+        "How AI is changing the world.",
+        "It\u2019s growing."
+      ],
+      "entities": [
+        "AI",
+        "revolution",
+        "world"
+      ]
+    },
+    "after_render_input": {
+      "intent": "hero",
+      "title": "AI Revolution",
+      "primary_element": "AI Revolution",
+      "supporting_elements": [
+        "How AI is changing the world.",
+        "It\u2019s growing."
+      ],
+      "entities": [
+        "AI",
+        "revolution",
+        "world"
+      ]
+    }
+  },
+  {
+    "slide": 2,
+    "intent": "split",
+    "raw_content": {
+      "title": "Growth",
+      "body": "We grew by 200% this year. We acquired 3 new companies. Everything is amazing in the tech space."
+    },
+    "raw_llm_preprocess": {
+      "intent": "split",
+      "title": "Growth",
+      "primary_element": "We grew by 200% this year.",
+      "supporting_elements": [
+        "We acquired 3 new companies.",
+        "Tech space conditions remain strong."
+      ],
+      "entities": [
+        "growth",
+        "acquisitions",
+        "tech space"
+      ]
+    },
+    "after_fallback": {
+      "intent": "split",
+      "title": "Growth",
+      "primary_element": "We grew by 200% this year.",
+      "supporting_elements": [
+        "We acquired 3 new companies.",
+        "Tech space conditions remain strong."
+      ],
+      "entities": [
+        "growth",
+        "acquisitions",
+        "tech space"
+      ]
+    },
+    "after_render_input": {
+      "intent": "split",
+      "title": "Growth",
+      "primary_element": "Growth",
+      "supporting_elements": [
+        "We acquired 3 new companies.",
+        "Tech space conditions remain strong."
+      ],
+      "entities": [
+        "growth",
+        "acquisitions",
+        "tech space"
+      ]
+    }
+  },
+  {
+    "slide": 3,
+    "intent": "blocks",
+    "raw_content": {
+      "title": "Future Plan",
+      "items": [
+        {
+          "title": "Step 1",
+          "desc": "Expand to Europe"
+        },
+        {
+          "title": "Step 2",
+          "desc": "Dominate completely"
+        }
+      ]
+    },
+    "raw_llm_preprocess": {
+      "intent": "blocks",
+      "title": "Future Plan",
+      "primary_element": "Future Plan",
+      "supporting_elements": [
+        "Step 1: Expand to Europe",
+        "Step 2: Dominate completely"
+      ],
+      "entities": [
+        "Europe",
+        "Expansion",
+        "Dominance"
+      ]
+    },
+    "after_fallback": {
+      "intent": "blocks",
+      "title": "Future Plan",
+      "primary_element": "Future Plan",
+      "supporting_elements": [
+        "Step 1: Expand to Europe",
+        "Step 2: Dominate completely"
+      ],
+      "entities": [
+        "Europe",
+        "Expansion",
+        "Dominance"
+      ]
+    },
+    "after_render_input": {
+      "intent": "blocks",
+      "title": "Future Plan",
+      "primary_element": "Future Plan",
+      "supporting_elements": [
+        "Step 1: Expand to Europe",
+        "Step 2: Dominate completely"
+      ],
+      "entities": [
+        "Europe",
+        "Expansion",
+        "Dominance"
+      ]
+    }
+  },
+  {
+    "slide": 4,
+    "intent": "stat",
+    "raw_content": {
+      "title": "",
+      "stats": [
+        {
+          "label": "Revenue",
+          "value": "$10M"
+        }
+      ]
+    },
+    "raw_llm_preprocess": {
+      "intent": "stat",
+      "title": "Revenue $10M",
+      "primary_element": "Revenue reached $10M",
+      "supporting_elements": [
+        "Key performance stat",
+        "Top-line revenue milestone"
+      ],
+      "entities": [
+        "Revenue",
+        "$10M"
+      ]
+    },
+    "after_fallback": {
+      "intent": "stat",
+      "title": "Revenue $10M",
+      "primary_element": "Revenue reached $10M",
+      "supporting_elements": [
+        "Key performance stat",
+        "Top-line revenue milestone"
+      ],
+      "entities": [
+        "Revenue",
+        "$10M"
+      ]
+    },
+    "after_render_input": {
+      "intent": "stat",
+      "title": "Revenue $10M",
+      "primary_element": "Revenue $10M",
+      "supporting_elements": [
+        "Key performance stat",
+        "Top-line revenue milestone"
+      ],
+      "entities": [
+        "Revenue",
+        "$10M"
+      ]
+    }
+  }
+]
