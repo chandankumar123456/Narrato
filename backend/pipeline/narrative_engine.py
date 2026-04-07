@@ -12,6 +12,8 @@ NARRATIVE_ROLES = [
     "Context", "Problem", "Tension", "Insight", "Solution", "Impact", "Closure"
 ]
 
+WEAK_MARKERS = {"", "derived", "basic", "from previous", "logical continuation", "next step"}
+
 NARRATIVE_ENGINE_SYSTEM_PROMPT = """You are a world-class Narrative Architect specializing in high-impact presentations.
 
 🔥 BUSINESS PRIORITY OVERRIDE (CRITICAL):
@@ -456,6 +458,69 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
     return slides
 
 
+def _is_weak(value: str) -> bool:
+    normalized = str(value or "").strip().lower()
+    return normalized in WEAK_MARKERS or len(normalized.split()) < 4
+
+
+def _phase_tension(idx: int, total: int, role: str) -> str:
+    if idx == 0:
+        return "Low tension: context is introduced with early stakes"
+    role_l = str(role or "").lower()
+    if "solution" in role_l or "product" in role_l:
+        return "Resolution starts: pressure shifts into actionable clarity"
+    if "impact" in role_l or "financial" in role_l:
+        return "Resolution deepens: outcomes validate the prior risk"
+    if "closure" in role_l or "funding ask" in role_l:
+        return "Resolved close: tension converts into a decisive next step"
+
+    midpoint = max(1, total // 2)
+    if idx < midpoint:
+        return "Rising tension: constraints are compounding and urgency increases"
+    if idx == midpoint:
+        return "Peak tension: continuation without change becomes untenable"
+    return "Controlled descent: pressure remains but is now being resolved"
+
+
+def _repair_narrative_fields(slides: list[dict], topic: str) -> list[dict]:
+    repaired: list[dict] = []
+    total = len(slides)
+    for i, original in enumerate(slides):
+        slide = dict(original)
+        previous = repaired[i - 1] if i > 0 else None
+        prev_message = (previous or {}).get("key_message", f"Slide {i}")
+
+        if _is_weak(slide.get("key_message")):
+            role = slide.get("role_in_story", "Context")
+            slide["key_message"] = f"{role} focus for {topic}".strip()
+
+        if i > 0:
+            cause = str(slide.get("cause", "")).strip()
+            if _is_weak(cause) or prev_message.lower() not in cause.lower():
+                slide["cause"] = f"Because '{prev_message}' exposes a gap, this slide is required now"
+        elif _is_weak(slide.get("cause")):
+            slide["cause"] = "This opens the narrative baseline that all later slides depend on"
+
+        if _is_weak(slide.get("next_trigger")):
+            next_role = slides[i + 1].get("role_in_story", "next phase") if i + 1 < total else "decision"
+            slide["next_trigger"] = f"This unresolved pressure now forces the {next_role} slide"
+
+        if _is_weak(slide.get("tension")):
+            slide["tension"] = _phase_tension(i, total, slide.get("role_in_story", ""))
+        else:
+            slide["tension"] = _phase_tension(i, total, slide.get("role_in_story", ""))
+
+        # Inevitability reinforcement for weak transition chains
+        transition_reason = str(slide.get("transition_reason", "")).strip()
+        if i > 0 and (_is_weak(transition_reason) or prev_message.lower() not in transition_reason.lower()):
+            slide["transition_reason"] = f"'{prev_message}' creates a concrete constraint this slide must resolve next"
+
+        slide["why_this_slide"] = slide.get("cause", "")
+        slide["why_next_slide"] = slide.get("next_trigger", "")
+        repaired.append(slide)
+    return repaired
+
+
 async def run_narrative_engine(state: PresentationState, business_context: dict = None) -> PresentationState:
     """Generate the presentation's narrative arc mapping out slide intents."""
     logger.info(f"[narrative_engine] Building story arc for {state.slide_count} slides...")
@@ -542,6 +607,7 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
                 slides = slides[:state.slide_count]
 
             valid_slides = validate_narrative_arc(slides, state.slide_count)
+            valid_slides = _repair_narrative_fields(valid_slides, state.topic)
             
             # Map valid slides to the state
             for slide in valid_slides:
@@ -549,8 +615,8 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
                 slide["why_next_slide"] = slide.get("next_trigger", "")
             from pipeline.investor_enforcer import enforce_investor_structure
 
-            # 🔥 enforce investor completeness
-            valid_slides = enforce_investor_structure(valid_slides)
+            # 🔥 enforce investor completeness and deterministic count
+            valid_slides = enforce_investor_structure(valid_slides, target_count=state.slide_count)
 
             return state.model_copy(update={"narrative_arc": valid_slides})
             
@@ -578,4 +644,7 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
             "why_this_slide": f"This step continues logic",
             "why_next_slide": "This creates need for next step"
         })
+    from pipeline.investor_enforcer import enforce_investor_structure
+    fallback_arc = _repair_narrative_fields(fallback_arc, state.topic)
+    fallback_arc = enforce_investor_structure(fallback_arc, target_count=state.slide_count)
     return state.model_copy(update={"narrative_arc": fallback_arc})

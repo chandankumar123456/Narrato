@@ -34,13 +34,34 @@ _ROLE_SEQUENCE = [
 ]
 
 
-def _get_narrative_role(slide_index: int, total_slides: int) -> str:
+def _get_narrative_role(slide_index: int, total_slides: int, slide_role: Optional[str] = None) -> str:
     """Map slide index (0-based) to narrative role.
 
     For presentations with ≤10 slides: direct mapping.
     For >10 slides: first and last are always hook/closure; middle
     slides cycle through the interior roles.
     """
+    role_text = (slide_role or "").strip().lower()
+    if role_text:
+        role_alias = {
+            "problem": "problem",
+            "solution": "solution",
+            "product": "application",
+            "market": "proof",
+            "business model": "application",
+            "competition": "explanation",
+            "financials": "proof",
+            "funding ask": "closure",
+            "impact": "proof",
+            "closure": "closure",
+            "context": "context",
+            "tension": "tension",
+            "insight": "insight",
+        }
+        for key, mapped in role_alias.items():
+            if key in role_text:
+                return mapped
+
     if total_slides <= 10:
         if slide_index < len(_ROLE_SEQUENCE):
             return _ROLE_SEQUENCE[slide_index]
@@ -176,10 +197,28 @@ def compute_visual_plan(
         Visual plan dict with: layout, density, emphasis, alignment,
         narrative_role, visual_intent.
     """
-    role = _get_narrative_role(slide_index, total_slides)
+    slide_role = preprocessing_result.get("role_in_story") or preprocessing_result.get("role")
+    role = _get_narrative_role(slide_index, total_slides, slide_role=slide_role)
     rules = _ROLE_VISUAL_RULES.get(role, _ROLE_VISUAL_RULES["application"])
 
-    layout = _pick_layout(rules["allowed_layouts"], layout_history)
+    fixed_layout_by_role = {
+        "problem": "left_heavy",
+        "solution": "center_focus",
+        "product": "staggered",
+        "market": "split",
+        "financials": "right_heavy",
+        "competition": "split",
+        "business model": "staggered",
+        "funding ask": "center_focus",
+    }
+    layout = None
+    role_text = str(slide_role or "").lower()
+    for key, fixed_layout in fixed_layout_by_role.items():
+        if key in role_text:
+            layout = fixed_layout
+            break
+    if layout is None:
+        layout = _pick_layout(rules["allowed_layouts"], layout_history)
     layout_history.append(layout)
 
     # Build visual intent from role rules + content

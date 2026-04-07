@@ -7,8 +7,8 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 3
-BACKOFF_SECONDS = [1, 2, 4]
+MAX_RETRIES = 2
+BACKOFF_SECONDS = [1]
 _semaphore = asyncio.Semaphore(3)
 
 

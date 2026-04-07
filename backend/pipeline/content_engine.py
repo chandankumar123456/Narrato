@@ -4,6 +4,8 @@ from models.presentation_state import PresentationState
 from services.llm_client import call_llm_json
 
 logger = logging.getLogger(__name__)
+MAX_SUPPORTING_ELEMENTS = 4
+MAX_WORDS_PER_BULLET = 12
 
 CONTENT_ENGINE_SYSTEM_PROMPT = """You are a Presentation Meaning Structurer.
 
@@ -42,6 +44,57 @@ def extract_role_behavior(role: str) -> str:
         "Closure": "bold, centered"
     }
     return behaviors.get(role, "minimal, balanced")
+
+
+def _truncate_words(text: str, max_words: int) -> str:
+    words = str(text or "").strip().split()
+    return " ".join(words[:max_words]).strip()
+
+
+def _normalize_supporting_elements(raw_elements, topic: str) -> list[str]:
+    fixed: list[str] = []
+    for raw in raw_elements or []:
+        sentence = str(raw or "").replace("\n", " ").strip()
+        if not sentence:
+            continue
+        sentence = sentence.split(".")[0].strip()
+        sentence = _truncate_words(sentence, MAX_WORDS_PER_BULLET)
+        if len(sentence.split()) < 3:
+            sentence = _truncate_words(
+                f"{sentence} for {topic} execution clarity",
+                MAX_WORDS_PER_BULLET,
+            )
+        fixed.append(sentence)
+        if len(fixed) >= MAX_SUPPORTING_ELEMENTS:
+            break
+    return fixed
+
+
+def _repair_slide_count(structured_slides: list[dict], narrative_arc: list[dict], expected: int, topic: str) -> list[dict]:
+    slides = list(structured_slides or [])
+    if len(slides) > expected:
+        return slides[:expected]
+
+    while len(slides) < expected:
+        i = len(slides)
+        arc = narrative_arc[i] if i < len(narrative_arc) else {}
+        if slides:
+            source = dict(slides[-1])
+            source["slide_id"] = i + 1
+            source["primary_element"] = arc.get("key_message") or source.get("primary_element") or f"{topic} key point {i+1}"
+            source["supporting_elements"] = _normalize_supporting_elements(
+                arc.get("supporting_elements") or source.get("supporting_elements") or [f"Critical evidence for {topic}"],
+                topic,
+            )[:MAX_SUPPORTING_ELEMENTS]
+            slides.append(source)
+        else:
+            slides.append({
+                "slide_id": i + 1,
+                "intent": arc.get("intent", "content"),
+                "primary_element": _truncate_words(arc.get("key_message", f"{topic} core message"), MAX_WORDS_PER_BULLET),
+                "supporting_elements": [f"Core investor insight for {topic}"],
+            })
+    return slides
 
 
 async def run_content_engine(state: PresentationState) -> PresentationState:
@@ -103,6 +156,14 @@ Return structured_slides with same length.
                     "supporting_elements": ["Content unavailable"]
                 })
 
+        expected_slide_count = state.slide_count or len(state.narrative_arc)
+        structured_slides = _repair_slide_count(
+            structured_slides,
+            state.narrative_arc or [],
+            expected_slide_count,
+            state.topic,
+        )
+
         # ✅ Ensure proper structure for ALL slides
         for i, slide in enumerate(structured_slides):
             
@@ -115,22 +176,30 @@ Return structured_slides with same length.
 
             slide["intent"] = original_intent
             slide["role_in_story"] = role
+            slide["role"] = role
             slide["emotional_tone"] = emotional_tone
             slide["type"] = "content_slide"
             slide["slide_id"] = i + 1
             slide["why_this_slide"] = arc_slide.get("cause", "")
             slide["why_next_slide"] = arc_slide.get("next_trigger", "")
+            slide["cause"] = arc_slide.get("cause", "")
+            slide["next_trigger"] = arc_slide.get("next_trigger", "")
             slide["tension"] = arc_slide.get("tension", "")
             slide["resolution"] = arc_slide.get("resolution", "")
-            
-            # ✅ FIX: enforce supporting_elements length
-            fixed_support = []
-            for elem in slide.get("supporting_elements", []):
-                if len(elem.split()) < 3:
-                    elem = elem + " to maintain system effectiveness"
-                fixed_support.append(elem)
+            slide["primary_element"] = _truncate_words(
+                slide.get("primary_element") or arc_slide.get("key_message", "Core message"),
+                MAX_WORDS_PER_BULLET,
+            )
 
-            slide["supporting_elements"] = fixed_support
+            # ✅ FIX: enforce supporting_elements length
+            slide["supporting_elements"] = _normalize_supporting_elements(
+                slide.get("supporting_elements", []),
+                state.topic,
+            )
+            if i > 0 and not slide["supporting_elements"]:
+                slide["supporting_elements"] = [
+                    _truncate_words(f"Operational proof point for {state.topic}", MAX_WORDS_PER_BULLET)
+                ]
 
         # rebuild slide_plan
         slide_plan = []

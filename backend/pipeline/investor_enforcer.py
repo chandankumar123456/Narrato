@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Set
 
 REQUIRED_ROLES = [
     "Problem",
@@ -16,15 +16,40 @@ def normalize_role(role: str) -> str:
     return (role or "").strip().lower()
 
 
-def role_matches(role: str, target: str) -> bool:
-    role = normalize_role(role)
-    target = target.lower()
-    return target in role
+def _canonical_coverage(role: str) -> Set[str]:
+    normalized = normalize_role(role)
+    covered: Set[str] = set()
+
+    direct_map = {
+        "problem": "Problem",
+        "solution": "Solution",
+        "product": "Product",
+        "market": "Market",
+        "business model": "Business Model",
+        "competition": "Competition",
+        "financials": "Financials",
+        "funding ask": "Funding Ask",
+    }
+
+    for key, canonical in direct_map.items():
+        if key in normalized:
+            covered.add(canonical)
+
+    # Narrative role normalization required by contract
+    if "solution" in normalized:
+        covered.update({"Product", "Business Model"})
+    if "impact" in normalized:
+        covered.add("Financials")
+    if "closure" in normalized:
+        covered.add("Funding Ask")
+
+    return covered
 
 
 def find_role(slides: List[Dict], target: str) -> bool:
     for s in slides:
-        if role_matches(s.get("role_in_story", ""), target):
+        role = s.get("role_in_story", "") or s.get("role", "")
+        if target in _canonical_coverage(role):
             return True
     return False
 
@@ -103,14 +128,54 @@ def inject_slide(slides: List[Dict], role: str) -> Dict:
     }
 
 
-def enforce_investor_structure(slides: List[Dict]) -> List[Dict]:
+def _trim_to_target_count(slides: List[Dict], target_count: int) -> List[Dict]:
+    trimmed = list(slides)
+    idx = len(trimmed) - 1
+    while len(trimmed) > target_count and idx >= 0:
+        candidate = trimmed[idx]
+        probe = trimmed[:idx] + trimmed[idx + 1:]
+        if all(find_role(probe, role) for role in REQUIRED_ROLES):
+            trimmed = probe
+        idx -= 1
+    return trimmed[:target_count]
+
+
+def _pad_to_target_count(slides: List[Dict], target_count: int) -> List[Dict]:
+    padded = list(slides)
+    while len(padded) < target_count:
+        if padded:
+            last = dict(padded[-1])
+            last["key_message"] = f"{last.get('key_message', 'Investor point')} (reinforced)"
+            last["cause"] = f"Builds directly on: {padded[-1].get('key_message', 'previous slide')}"
+            last["next_trigger"] = "This creates a concrete need for the next investor proof point"
+            padded.append(last)
+        else:
+            padded.append(inject_slide([], "Problem"))
+    return padded
+
+
+def _reindex_slides(slides: List[Dict]) -> List[Dict]:
+    for idx, slide in enumerate(slides, start=1):
+        slide["slide_id"] = idx
+    return slides
+
+
+def enforce_investor_structure(slides: List[Dict], target_count: int | None = None) -> List[Dict]:
     """
     Ensures all required investor roles exist.
     Injects missing slides.
     """
 
-    for role in REQUIRED_ROLES:
-        if not find_role(slides, role):
-            slides.append(inject_slide(slides, role))
+    enforced = list(slides or [])
 
-    return slides
+    for role in REQUIRED_ROLES:
+        if not find_role(enforced, role):
+            enforced.append(inject_slide(enforced, role))
+
+    if target_count is not None:
+        if len(enforced) > target_count:
+            enforced = _trim_to_target_count(enforced, target_count)
+        elif len(enforced) < target_count:
+            enforced = _pad_to_target_count(enforced, target_count)
+
+    return _reindex_slides(enforced)

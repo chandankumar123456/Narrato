@@ -15,6 +15,17 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+REQUIRED_INVESTOR_ROLES = (
+    "Problem",
+    "Solution",
+    "Product",
+    "Market",
+    "Business Model",
+    "Competition",
+    "Financials",
+    "Funding Ask",
+)
+
 
 class SlideValidationError(ValueError):
     """Raised when slide content fails strict validation."""
@@ -78,10 +89,23 @@ def validate_slide_content(slides: list[dict]) -> list[dict]:
                     f"Slide {slide_id} ({slide_type}): missing supporting_elements"
                 )
             else:
+                if len(supporting_elements) > 4:
+                    violations.append(
+                        f"Slide {slide_id} ({slide_type}): supporting_elements exceeds max 4"
+                    )
                 for idx, sup in enumerate(supporting_elements):
-                    if len(str(sup).split()) <= 2:
+                    sup_words = len(str(sup).split())
+                    if "\n" in str(sup):
+                        violations.append(
+                            f"Slide {slide_id} ({slide_type}): supporting_elements[{idx}] contains paragraph formatting"
+                        )
+                    if sup_words <= 2:
                         violations.append(
                             f"Slide {slide_id} ({slide_type}): supporting_elements[{idx}] too short: '{sup}'"
+                        )
+                    if sup_words > 12:
+                        violations.append(
+                            f"Slide {slide_id} ({slide_type}): supporting_elements[{idx}] exceeds 12 words"
                         )
 
     if violations:
@@ -300,3 +324,41 @@ def _is_non_empty(val: Any) -> bool:
     if isinstance(val, dict):
         return len(val) > 0
     return True
+
+
+def validate_pipeline_contract(
+    structured_slides: list[dict],
+    html_slides: list[str],
+    expected_slide_count: int,
+) -> None:
+    """Final pre-render contract validation for reliability and determinism."""
+    violations: list[str] = []
+    slides = structured_slides or []
+    html = html_slides or []
+
+    if len(slides) != expected_slide_count:
+        violations.append(
+            f"Structured slide count mismatch: expected {expected_slide_count}, got {len(slides)}"
+        )
+
+    if len(html) != len(slides):
+        violations.append(
+            f"HTML parity mismatch: html={len(html)} structured={len(slides)}"
+        )
+
+    roles = {str((s.get("role") or s.get("role_in_story") or "")).strip().lower() for s in slides}
+    for required in REQUIRED_INVESTOR_ROLES:
+        if required.lower() not in roles:
+            violations.append(f"Missing required role: {required}")
+
+    for idx, slide in enumerate(slides, start=1):
+        for field in ("cause", "tension", "next_trigger"):
+            value = str(slide.get(field, "")).strip()
+            if not value:
+                violations.append(f"Slide {idx}: missing {field}")
+        headline = str(slide.get("primary_element", "")).strip()
+        if not headline:
+            violations.append(f"Slide {idx}: empty primary_element")
+
+    if violations:
+        raise SlideValidationError(violations)

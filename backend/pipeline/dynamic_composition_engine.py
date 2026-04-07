@@ -9,6 +9,21 @@ from pipeline.content_integrity import verify_narrative_to_preprocess, verify_pr
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_theme(theme_dict: dict) -> dict:
+    base = {
+        "background": "dark",
+        "primary_color": "#5B8CFF",
+        "font_scale": "balanced-title-body",
+        "spacing_scale": "cozy",
+    }
+    merged = {**base, **(theme_dict or {})}
+    merged["background"] = "light" if str(merged.get("background", "")).lower() == "light" else "dark"
+    merged["primary_color"] = str(merged.get("primary_color", base["primary_color"])).strip() or base["primary_color"]
+    merged["font_scale"] = str(merged.get("font_scale", base["font_scale"])).strip() or base["font_scale"]
+    merged["spacing_scale"] = str(merged.get("spacing_scale", base["spacing_scale"])).strip() or base["spacing_scale"]
+    return merged
+
 def _load_slides_css() -> str:
     css_path = Path(__file__).resolve().parent / "static" / "slides.css"
     if css_path.exists():
@@ -305,6 +320,7 @@ Content:
                         raise ValueError("Supporting element is a single word or empty.")
             
             # Passed strict validation
+            preprocessing_result["role_in_story"] = role_in_story
             break
         except Exception as e:
             logger.warning(f"Slide {slide_index + 1}: Preprocessing attempt {attempt + 1} failed: {e}")
@@ -321,7 +337,8 @@ Content:
                     "primary_element": safe_title,
                     # "supporting_elements": ["This section covers key points about the topic."] if slide_index > 0 else [],
                     "supporting_elements": [f"Key insight about {topic}"] if slide_index > 0 else [],
-                    "entities": []
+                    "entities": [],
+                    "role_in_story": role_in_story,
                 }
     continuity_context["last_slide_summary"] = preprocessing_result.get("primary_element", "")
 
@@ -527,14 +544,10 @@ async def run_dynamic_composition_engine(slides: list, state_theme: str, topic: 
     logger.info(f"[dynamic_composition] Generating strict theme consistency data for {state_theme}...")
     try:
         theme_dict = await call_llm_json(THEME_GENERATION_PROMPT, f"Desired theme name or tone: {state_theme}")
+        theme_dict = _normalize_theme(theme_dict)
     except Exception as e:
         logger.error(f"[dynamic_composition] Theme generation failed: {e}")
-        theme_dict = {
-            "background": "dark",
-            "primary_color": "white",
-            "font_scale": "massive headers, tiny constraints",
-            "spacing_scale": "cozy"
-        }
+        theme_dict = _normalize_theme({})
     
     logger.info(f"[dynamic_composition] Generating custom designs for {len(slides)} slides with theme={theme_dict.get('primary_color')}...")
     
@@ -552,19 +565,6 @@ async def run_dynamic_composition_engine(slides: list, state_theme: str, topic: 
             inferred_topic = first_content.get("title", "") or first_content.get("punchline", "")
     
     for idx, slide_data in enumerate(slides):
-        role_map = [
-            "context",
-            "problem",
-            "escalation",
-            "breaking_point",
-            "solution",
-            "mechanism",
-            "outcome"
-        ]
-
-        if idx < len(role_map):
-            slide_data["role_in_story"] = role_map[idx]
-        
         design, slide_html, continuity_context = await generate_slide_html(
             slide_data, idx, total_slides, theme_dict, continuity_context, layout_history,
             topic=inferred_topic,
