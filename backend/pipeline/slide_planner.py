@@ -1,15 +1,40 @@
 from models.presentation_state import PresentationState
 
+INVESTOR_SECTIONS = [
+    "intro",
+    "problem",
+    "solution",
+    "market",
+    "product",
+    "business",
+    "traction",
+    "competition",
+    "gtm",
+    "team",
+    "ask"
+]
+
 SECTION_WEIGHTS = {
-    "intro": 0.10,
-    "problem": 0.20,
-    "solution": 0.25,
-    "benefits": 0.30,
-    "conclusion": 0.15,
+    "intro": 0.08,
+    "problem": 0.12,
+    "solution": 0.12,
+    "market": 0.10,
+    "product": 0.10,
+    "business": 0.10,
+    "traction": 0.10,
+    "competition": 0.08,
+    "gtm": 0.08,
+    "team": 0.06,
+    "ask": 0.06,
 }
 
 def plan_slides(state: PresentationState) -> PresentationState:
-    sections_flow = state.story["sections_flow"]
+    # sections_flow = state.story["sections_flow"]
+    # Use investor structure if needed
+    if getattr(state, "deck_mode", "general") == "investor":
+        sections_flow = [{"section": sec, "purpose": sec} for sec in INVESTOR_SECTIONS]
+    else:
+        sections_flow = state.story["sections_flow"]
     total = state.slide_count
     slides = []
     slide_id = 1
@@ -17,7 +42,11 @@ def plan_slides(state: PresentationState) -> PresentationState:
     for i, sec in enumerate(sections_flow):
         section = sec["section"]
         weight = SECTION_WEIGHTS.get(section, 1 / len(sections_flow))
-        count = max(1, round(total * weight))
+        # count = max(1, round(total * weight))
+        remaining = total - len(slides)
+        sections_left = len(sections_flow) - i
+
+        count = max(1, remaining // sections_left)
 
         # Section header (except for intro)
         if i > 0:

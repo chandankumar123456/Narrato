@@ -375,3 +375,9 @@ vite.config.ts.timestamp-*
 
 /backend/outputs/
 clean_env/
+
+print_file_names.py
+extract_files_content.py
+extract_python_code.py
+extracted_backend_python_files.txt
+extracted_files.txt

@@ -69,6 +69,9 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
 
 async def run_narrative_engine(state: PresentationState) -> PresentationState:
     """Generate the presentation's narrative arc mapping out slide intents."""
+    # ── Skip narrative for investor mode ─────────────────────
+    if getattr(state, "deck_mode", "general") == "investor":
+        return state
     logger.info(f"[narrative_engine] Building story arc for {state.slide_count} slides...")
 
     system_prompt = NARRATIVE_ENGINE_SYSTEM_PROMPT.format(slide_count=state.slide_count)

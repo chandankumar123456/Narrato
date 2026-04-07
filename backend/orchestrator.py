@@ -94,6 +94,15 @@ async def run_pipeline(prompt: str, options: dict = {},
     try:
         signals = await parse_prompt(prompt)
         signals.update({k: v for k, v in options.items() if v is not None and not k.startswith("_")})
+        # ── Detect investor mode ─────────────────────────
+        deck_mode = "general"
+        prompt_lower = prompt.lower()
+
+        if any(x in prompt_lower for x in ["pitch deck", "investor", "startup"]):
+            deck_mode = "investor"
+
+        signals["deck_mode"] = deck_mode
+        
     except Exception as exc:
         _fail("prompt_parse", str(exc))
 
@@ -108,6 +117,9 @@ async def run_pipeline(prompt: str, options: dict = {},
 
     # ── Stage 2: Build state ──────────────────────────────────────
     state = build_state(signals, user_schema=user_schema)
+    state.user_schema = user_schema or {}
+    deck_mode = signals.get("deck_mode", "general")
+    
     total_slides = state.slide_count
     logger.info(
         "[pipeline] State built: %s | mode=%s | %d slides",
@@ -162,44 +174,92 @@ async def run_pipeline(prompt: str, options: dict = {},
               total_slides=total_slides)
 
     else:
-        # ── DEFAULT PIPELINE: Narrative-first ─────────────────────
-        # Optional: complete state (fills in missing fields)
-        try:
-            state = await complete_state(state)
-        except Exception as exc:
-            logger.warning("[pipeline] State completion failed, continuing: %s", exc)
+        # # ── DEFAULT PIPELINE: Narrative-first ─────────────────────
+        # # Optional: complete state (fills in missing fields)
+        # try:
+        #     state = await complete_state(state)
+        # except Exception as exc:
+        #     logger.warning("[pipeline] State completion failed, continuing: %s", exc)
 
-        completed_steps += 1
-        _emit(EventType.STAGE_UPDATE, "state_complete", "Building narrative arc…",
-              _compute_progress(completed_steps, total_steps))
+        # completed_steps += 1
+        # _emit(EventType.STAGE_UPDATE, "state_complete", "Building narrative arc…",
+        #       _compute_progress(completed_steps, total_steps))
 
-        # CRITICAL: Generate Narrative Arc & Flow in ONE LLM call
-        try:
-            state = await run_narrative_engine(state)
-        except Exception as exc:
-            logger.warning("[pipeline] narrative_engine failed: %s — pipeline will continue with fallback arc", exc)
+        # # CRITICAL: Generate Narrative Arc & Flow in ONE LLM call
+        # try:
+        #     state = await run_narrative_engine(state)
+        # except Exception as exc:
+        #     logger.warning("[pipeline] narrative_engine failed: %s — pipeline will continue with fallback arc", exc)
 
-        completed_steps += 1
-        _emit(EventType.STAGE_UPDATE, "narrative_arc", "Narrative flow generated…",
-              _compute_progress(completed_steps, total_steps))
+        # completed_steps += 1
+        # _emit(EventType.STAGE_UPDATE, "narrative_arc", "Narrative flow generated…",
+        #       _compute_progress(completed_steps, total_steps))
 
-        # CRITICAL: Map Narrative Arc into compressed Slide Content
-        try:
+        # # CRITICAL: Map Narrative Arc into compressed Slide Content
+        # try:
+        #     state = await run_content_engine(state)
+        # except Exception as exc:
+        #     logger.warning("[pipeline] content_engine failed: %s — pipeline will continue with fallback", exc)
+        #     if not state.structured_slides:
+        #         logger.warning("[pipeline] No slides generated — injecting minimal fallback")
+        #         state = _inject_fallback_slides(state)
+
+        # total_slides = len(state.structured_slides or [])
+        # total_steps = GLOBAL_STEPS + (total_slides * per_slide_steps)
+        # completed_steps += 1
+        # logger.info("[pipeline] Narrative generated: %d slides", total_slides)
+        # _emit(EventType.STAGE_UPDATE, "narrative_done",
+        #       f"Narrative generated — {total_slides} slides",
+        #       _compute_progress(completed_steps, total_steps),
+        #       total_slides=total_slides)
+        
+        # ── PIPELINE SWITCH: INVESTOR vs NARRATIVE ─────────────────────
+
+        if deck_mode == "investor":
+            logger.info("[pipeline] Using INVESTOR MODE (structure-first)")
+
+            if not state.story:
+                state.story = {}
+
+            state.story["sections_flow"] = [
+                {"section": "intro", "purpose": "Title"},
+                {"section": "problem", "purpose": "Problem"},
+                {"section": "solution", "purpose": "Solution"},
+                {"section": "market", "purpose": "Market Opportunity"},
+                {"section": "product", "purpose": "Product"},
+                {"section": "business", "purpose": "Business Model"},
+                {"section": "traction", "purpose": "Traction"},
+                {"section": "competition", "purpose": "Competition"},
+                {"section": "gtm", "purpose": "Go To Market"},
+                {"section": "team", "purpose": "Team"},
+                {"section": "ask", "purpose": "Funding Ask"}
+            ]
+
+            # state = plan_slides_strict(state)
+            
+            # state = await generate_strict_content(state)
+            
+            from pipeline.slide_planner import plan_slides
+
+            state = plan_slides(state)
+            # ✅ FIX: create synthetic narrative_arc for content_engine
+            state.narrative_arc = []
+
+            for slide in state.slide_plan:
+                state.narrative_arc.append({
+                    "intent": slide.get("purpose", ""),
+                    "role_in_story": slide.get("section", "general").capitalize(),
+                    "key_message": slide.get("purpose", ""),
+                    "transition_reason": "Structured flow",
+                    "emotional_tone": "neutral"
+                })
             state = await run_content_engine(state)
-        except Exception as exc:
-            logger.warning("[pipeline] content_engine failed: %s — pipeline will continue with fallback", exc)
-            if not state.structured_slides:
-                logger.warning("[pipeline] No slides generated — injecting minimal fallback")
-                state = _inject_fallback_slides(state)
+            
+            total_slides = len(state.slide_plan or [])
 
-        total_slides = len(state.structured_slides or [])
-        total_steps = GLOBAL_STEPS + (total_slides * per_slide_steps)
-        completed_steps += 1
-        logger.info("[pipeline] Narrative generated: %d slides", total_slides)
-        _emit(EventType.STAGE_UPDATE, "narrative_done",
-              f"Narrative generated — {total_slides} slides",
-              _compute_progress(completed_steps, total_steps),
-              total_slides=total_slides)
+        else:
+            state = await run_narrative_engine(state)
+            state = await run_content_engine(state)
 
     # ── Shared tail (both paths) ──────────────────────────────────
 
@@ -276,8 +336,25 @@ async def run_pipeline(prompt: str, options: dict = {},
           total_slides=total_slides)
 
     # ── Emit completion ───────────────────────────────────────────
-    _emit(EventType.JOB_COMPLETED, "completed", "Presentation ready!",
-          100, total_slides=total_slides)
+    # _emit(EventType.JOB_COMPLETED, "completed", "Presentation ready!",
+    #       100, total_slides=total_slides)
+    
+    # ✅ FIX: send proper completion signal for SSE
+    _emit(
+        EventType.STAGE_UPDATE,
+        "completed",
+        "Presentation ready!",
+        100,
+        total_slides=total_slides
+    )
+
+    _emit(
+        EventType.JOB_COMPLETED,
+        "completed",
+        "Presentation ready!",
+        100,
+        total_slides=total_slides
+    )
 
     return {
         "html_slides": all_html_slides if all_html_slides else visual_output.get("html_slides", []),

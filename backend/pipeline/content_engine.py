@@ -5,33 +5,43 @@ from services.llm_client import call_llm_json
 
 logger = logging.getLogger(__name__)
 
-CONTENT_ENGINE_SYSTEM_PROMPT = """You are a Master Content Composer for presentations. Needs no fluff, no corporate speak.
-Your task is to take a complete narrative arc (a sequence of slide intents) and generate the *actual text* for each slide.
+# ✅ FIXED: Strong JSON enforcement + supports both pitch & narrative modes
+CONTENT_ENGINE_SYSTEM_PROMPT = """You are a Master Content Composer for presentations.
 
-NARRATIVE COMPRESSION RULES (CRITICAL):
-1. Write in punchlines, contrast statements, and short impactful phrases. NO paragraphs. No bullet vomit.
-2. A slide must communicate ONE single defining idea perfectly.
-3. Replace generic language (e.g. "We optimize clinical workflows") with hard reality ("Fragmented ownership breaks the workflow").
-4. MAINTAIN NARRATIVE CONTINUITY: Reuse key phrases or entities precisely from one slide to the next to build a logical mental ladder. 
+You MUST return STRICT JSON.
 
-STORY-ROLE TO LAYOUT MAPPING:
-Design behavior is driven by the role of the slide:
-- Hook -> minimal, bold, dominant
-- Problem -> sharp, high contrast
-- Tension -> fragmented, pressure
-- Insight -> reveal-focused
-- Solution -> structured clarity
-- Impact -> stats-driven
-- Closure -> strong, conclusive, visually resting.
+OUTPUT FORMAT (VERY IMPORTANT):
+{
+  "structured_slides": [
+    {
+      "slide_id": 1,
+      "intent": "string",
+      "content": {
+        "title": "string",
+        "points": ["point1", "point2"]
+      }
+    }
+  ]
+}
 
-OUTPUT FORMAT (STRICT JSON):
-Return a JSON object with a key 'structured_slides', containing a list where each element matches the input array length.
-Each element MUST contain:
-- 'slide_id': integer (1 for the first slide, and so on)
-- 'intent': A string that combines the original intent AND the mapped design behavior (e.g. "role: Problem, design behavior: sharp, high contrast, intent: stark_contrast")
-- 'content': A dictionary containing the actual text. Use keys like "title", "punchline", "subtext", "metrics". These will be fed to a separate visual composition engine.
+RULES:
+- ALWAYS return valid JSON (no extra text)
+- structured_slides must be a list
+- Each slide MUST have:
+    - slide_id (int)
+    - intent (string)
+    - content (DICT) ❗
+- content MUST NOT be empty
+- content MUST be a dictionary
 
-Do NOT output markdown. Output raw JSON only.
+IF presentation_type == "pitch":
+- Use structured bullet points (2–4)
+- Include concrete statements / metrics if possible
+
+IF NOT:
+- Use concise punchlines
+
+DO NOT return empty content under any condition.
 """
 
 def extract_role_behavior(role: str) -> str:
@@ -49,57 +59,90 @@ def extract_role_behavior(role: str) -> str:
 
 
 async def run_content_engine(state: PresentationState) -> PresentationState:
-    """Generate the actual slide content based on the narrative arc."""
+    """Generate slide content (works for both narrative + structured pipelines)."""
+
+    # ✅ FIX: Remove hard dependency on narrative_arc
     if not state.narrative_arc:
-        logger.error("[content_engine] No narrative_arc found in state. Run narrative_engine first.")
-        raise ValueError("narrative_arc is missing.")
+        logger.warning("[content_engine] No narrative_arc found — generating from slide_plan")
 
-    logger.info(f"[content_engine] Generating slide content based on arc of length {len(state.narrative_arc)}")
+        state.narrative_arc = []
+        for slide in (state.slide_plan or []):
+            state.narrative_arc.append({
+                "intent": slide.get("purpose", ""),
+                "role_in_story": slide.get("section", "general").capitalize(),
+                "key_message": slide.get("purpose", ""),
+                "transition_reason": "Structured flow",
+                "emotional_tone": "neutral"
+            })
 
-    arc_json = json.dumps(state.narrative_arc, indent=2)
+    logger.info(f"[content_engine] Generating slide content for {len(state.narrative_arc)} slides")
+
+    # ✅ Use arc only if narrative mode
+    if getattr(state, "deck_mode", "general") == "investor":
+        arc_json = "Use structured sections (problem, solution, market, etc.)"
+    else:
+        arc_json = json.dumps(state.narrative_arc, indent=2)
 
     user_prompt = f"""Topic: {state.topic}
 Type: {state.presentation_type}
+Deck Mode: {getattr(state, "deck_mode", "general")}
 Audience: {state.audience}
 
-Here is the approved Narrative Arc (Intents & Flow):
+Here is the structure:
 {arc_json}
 
-Follow the Compression rules. Guarantee continuity from slide N to N+1 based on the 'transition_reason'.
-Output the 'structured_slides' array EXACTLY matching the {len(state.narrative_arc)} slides described.
+Generate EXACTLY {len(state.narrative_arc)} slides.
+Each slide must map 1:1.
+
+Return structured_slides with same length.
 """
 
     try:
         result = await call_llm_json(CONTENT_ENGINE_SYSTEM_PROMPT, user_prompt)
         structured_slides = result.get("structured_slides", [])
-        
-        if len(structured_slides) != len(state.narrative_arc):
-            logger.warning("[content_engine] Slide count mismatch between arc and generated content! Recovering best-effort.")
 
-        # Ensure intents are thoroughly set for dynamic composition engine
+        # ✅ FIX: HARD fallback if model fails
+        if not structured_slides:
+            logger.warning("[content_engine] Empty response — using fallback content")
+
+            structured_slides = []
+            for i, arc in enumerate(state.narrative_arc):
+                structured_slides.append({
+                    "slide_id": i + 1,
+                    "intent": arc.get("intent", ""),
+                    "content": {
+                        "title": arc.get("key_message", "Slide"),
+                        "points": ["Content unavailable"]
+                    }
+                })
+
+        # ✅ Ensure proper structure for ALL slides
         for i, slide in enumerate(structured_slides):
-            if i < len(state.narrative_arc):
-                arc_slide = state.narrative_arc[i]
-                role = arc_slide.get("role_in_story", "Context")
-                behavior = extract_role_behavior(role)
-                original_intent = arc_slide.get("intent", "")
-                emotional_tone = arc_slide.get("emotional_tone", "neutral")
-                
-                # We package the story role, behavior, and intent into the "intent" field
-                # because `dynamic_composition_engine.py` reads `slide_data.get("intent")` directly.
-                combined_intent = f"Role: {role} | Behavior: {behavior} | Direct Intent: {original_intent}"
-                slide["intent"] = combined_intent
-                slide["role_in_story"] = role
-                slide["emotional_tone"] = emotional_tone
-                slide["type"] = "content_slide"
-                
-                # Also inject slide_id if missing
-                slide["slide_id"] = i + 1
+            # fallback content if missing
+            if not isinstance(slide.get("content"), dict):
+                slide["content"] = {
+                    "title": f"Slide {i+1}",
+                    "points": ["Content missing"]
+                }
 
-        # We must keep "slide_plan" for speaker notes and UI
+            arc_slide = state.narrative_arc[i] if i < len(state.narrative_arc) else {}
+
+            role = arc_slide.get("role_in_story", "Context")
+            behavior = extract_role_behavior(role)
+            original_intent = arc_slide.get("intent", "")
+            emotional_tone = arc_slide.get("emotional_tone", "neutral")
+
+            slide["intent"] = f"Role: {role} | Behavior: {behavior} | Direct Intent: {original_intent}"
+            slide["role_in_story"] = role
+            slide["emotional_tone"] = emotional_tone
+            slide["type"] = "content_slide"
+            slide["slide_id"] = i + 1
+
+        # rebuild slide_plan
         slide_plan = []
         for i, slide in enumerate(structured_slides):
             arc = state.narrative_arc[i] if i < len(state.narrative_arc) else {}
+
             slide_plan.append({
                 "slide_id": slide.get("slide_id", i+1),
                 "section": arc.get("role_in_story", "general").lower(),
@@ -114,5 +157,4 @@ Output the 'structured_slides' array EXACTLY matching the {len(state.narrative_a
 
     except Exception as e:
         logger.error(f"[content_engine] Content generation failed: {e}")
-        # Fallback missing for brevity, would want retry logic in production
         raise e

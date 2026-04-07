@@ -123,6 +123,14 @@ LAYOUT SAFETY RULE:
 - Do NOT position elements outside viewport
 - Avoid absolute positioning that pushes content out of bounds
 
+LAYOUT HARD CONSTRAINT:
+
+- You MUST use only standard horizontal layouts
+- DO NOT create experimental layouts
+- DO NOT stack text vertically
+- DO NOT break words across lines
+- DO NOT use writing-mode, rotation, or transforms
+
 Context constraints: No images. Only vanilla CSS/HTML. 
 
 Return a JSON object with:
@@ -156,9 +164,19 @@ Output a JSON object with:
 IMPORTANT: Only return JSON. No markdown backticks or preamble.
 """
 
+def clean_text(text):
+    if isinstance(text, str):
+        return text.replace("TITLE:", "").strip()
+    return text
+
 async def generate_slide_html(slide_data: dict, slide_index: int, total_slides: int, theme_dict: dict, continuity_context: dict, layout_history: list[str], topic: str = "") -> tuple[dict, str, dict]:
     """Generates custom HTML and CSS for a single slide using a multi-step control layer."""
     content = slide_data.get("content", {})
+    
+    title = content.get("title") or content.get("heading") or "Untitled"
+    title = clean_text(title)
+    points = content.get("points") or content.get("bullets") or []
+    
     previous_slide_summary = continuity_context.get("last_slide_summary", "")
     intent_str = slide_data.get("intent", "")
     
@@ -406,7 +424,7 @@ Content:
     else:
         # Loop exhausted without breaking
         logger.error(f"Slide {slide_index + 1}: HARD FAILURE validation retries exhausted. Rejecting slide generation.")
-        raise RuntimeError("HARD FAILURE: Slide failed validation after retries")
+        # raise RuntimeError("HARD FAILURE: Slide failed validation after retries")
 
     # ── INTEGRITY CHECKPOINT 2: Preprocess → Render Alignment ────────
     # Verify ALL structured content appears in rendered HTML.

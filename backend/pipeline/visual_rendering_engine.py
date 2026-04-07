@@ -120,6 +120,22 @@ async def render_slides_to_images(
             page = await context.new_page()
             await page.set_content(slide_html, wait_until="load")
             await _wait_for_slide_ready(page)
+            await page.evaluate("""
+            () => {
+            document.body.style.transform = 'scale(1)';
+            document.body.style.transformOrigin = 'top left';
+            }
+            """)
+            
+            overflow = await page.evaluate("""
+            () => {
+            const el = document.body;
+            return el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth;
+            }
+            """)
+
+            if overflow:
+                raise ExportRenderError("Slide overflow detected — content exceeds bounds")
 
             png_path = os.path.join(output_dir, f"slide_{idx + 1}.png")
             await page.screenshot(path=png_path, full_page=False)
@@ -174,12 +190,28 @@ async def render_slides_to_pdf(
             page = await context.new_page()
             await page.set_content(slide_html, wait_until="load")
             await _wait_for_slide_ready(page)
+            await page.evaluate("""
+            () => {
+            document.body.style.transform = 'scale(1)';
+            document.body.style.transformOrigin = 'top left';
+            }
+            """)
+
+            overflow = await page.evaluate("""
+            () => {
+            const el = document.body;
+            return el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth;
+            }
+            """)
+
+            if overflow:
+                raise ExportRenderError("Slide overflow detected — content exceeds bounds")
 
             pdf_bytes = await page.pdf(
                 width=f"{VIEWPORT_WIDTH}px",
                 height=f"{VIEWPORT_HEIGHT}px",
                 print_background=True,
-                prefer_css_page_size=True,
+                prefer_css_page_size=False,
             )
             per_slide_pdfs.append(pdf_bytes)
             await page.close()
