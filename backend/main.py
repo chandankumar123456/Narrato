@@ -460,7 +460,11 @@ async def get_slides(job_id: str):
         }
         # Attach structured content if available
         if idx < len(structured_slides):
-            slide_data["content"] = structured_slides[idx].get("content", {})
+            # slide_data["content"] = structured_slides[idx].get("content", {})
+            slide_data["content"] = {
+                "primary": structured_slides[idx].get("primary_element"),
+                "support": structured_slides[idx].get("supporting_elements")
+            }
             slide_data["type"] = structured_slides[idx].get("type", "unknown")
         slides.append(slide_data)
 
@@ -494,12 +498,13 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
 
         # Use LLM to regenerate slide content based on instruction
         system_prompt = (
-            "You are a presentation content expert. Regenerate the slide content based on the instruction. "
-            "Return a JSON object with the same structure as the input slide content. "
-            "Keep the same slide type and structure. Only modify the content as instructed."
+            "You are a presentation content expert. "
+            "Regenerate slide content based on the instruction. "
+            "Return STRICT JSON with keys: primary_element (string) and supporting_elements (array of strings). "
+            "Do NOT return title, points, or content fields."
         )
         user_prompt = (
-            f"Current slide content:\n{json.dumps(slide.get('content', {}), indent=2)}\n\n"
+            f"Current slide content:\n{json.dumps({'primary_element': slide.get('primary_element'), 'supporting_elements': slide.get('supporting_elements')}, indent=2)}\n\n"
             f"Slide type: {slide.get('type', 'unknown')}\n\n"
             f"Instruction: {req.instruction or 'Improve this slide - make it more impactful and specific'}"
         )
@@ -507,7 +512,12 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
         new_content = await call_llm_json(system_prompt, user_prompt)
 
         # Update the structured slide
-        structured_slides[idx] = {**slide, "content": new_content}
+        # structured_slides[idx] = {**slide, "content": new_content}
+        structured_slides[idx] = {
+            **slide,
+            "primary_element": new_content.get("primary_element"),
+            "supporting_elements": new_content.get("supporting_elements")
+        }
 
         # Re-run dynamic composition for just this slide
         designs, new_html_list = await run_dynamic_composition_engine(
@@ -534,7 +544,10 @@ async def regenerate_slide(job_id: str, req: RegenerateSlideRequest):
                 "slide_id": req.slide_id,
                 "html_url": f"/outputs/{safe_id}/slide_{req.slide_id}.html",
                 "html": new_html,
-                "content": new_content,
+                "content": {
+                    "primary": new_content.get("primary_element"),
+                    "support": new_content.get("supporting_elements")
+                },
                 "status": "regenerated",
             }
     except Exception as e:
@@ -609,7 +622,11 @@ async def update_slide(job_id: str, req: UpdateSlideRequest):
         from pipeline.dynamic_composition_engine import run_dynamic_composition_engine
 
         # Update the content
-        structured_slides[idx] = {**slide, "content": req.content}
+        # structured_slides[idx] = {**slide, "content": req.content}
+        structured_slides[idx] = {**slide,
+                                  "primary_element": req.content.get("primary"), 
+                                  "supporting_elements": req.content.get("support")
+        }
 
         designs, new_html_list = await run_dynamic_composition_engine(
             [structured_slides[idx]],

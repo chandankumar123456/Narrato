@@ -92,6 +92,9 @@ Output strictly JSON.
             valid_slides = validate_narrative_arc(slides, state.slide_count)
             
             # Map valid slides to the state
+            for slide in valid_slides:
+                slide["why_this_slide"] = slide.get("intent", "")
+                slide["why_next_slide"] = slide.get("transition_reason", "")
             return state.model_copy(update={"narrative_arc": valid_slides})
             
         except NarrativeEngineError as e:
@@ -109,6 +112,10 @@ Output strictly JSON.
             "role_in_story": NARRATIVE_ROLES[role_idx],
             "key_message": f"Core point {i+1} for {state.topic}",
             "transition_reason": "Moving to next point" if i > 0 else "Start",
-            "emotional_tone": "neutral"
+            "emotional_tone": "neutral",
+            
+            # 🔥 ADD
+            "why_this_slide": f"Core point {i+1}",
+            "why_next_slide": "Leads to next point"
         })
     return state.model_copy(update={"narrative_arc": fallback_arc})

@@ -216,49 +216,33 @@ async def run_pipeline(prompt: str, options: dict = {},
         # ── PIPELINE SWITCH: INVESTOR vs NARRATIVE ─────────────────────
 
         if deck_mode == "investor":
-            logger.info("[pipeline] Using INVESTOR MODE (structure-first)")
+            logger.info("[pipeline] Using INVESTOR MODE (narrative-driven)")
 
-            if not state.story:
-                state.story = {}
-
-            state.story["sections_flow"] = [
-                {"section": "intro", "purpose": "Title"},
-                {"section": "problem", "purpose": "Problem"},
-                {"section": "solution", "purpose": "Solution"},
-                {"section": "market", "purpose": "Market Opportunity"},
-                {"section": "product", "purpose": "Product"},
-                {"section": "business", "purpose": "Business Model"},
-                {"section": "traction", "purpose": "Traction"},
-                {"section": "competition", "purpose": "Competition"},
-                {"section": "gtm", "purpose": "Go To Market"},
-                {"section": "team", "purpose": "Team"},
-                {"section": "ask", "purpose": "Funding Ask"}
-            ]
-
-            # state = plan_slides_strict(state)
+            state = await run_narrative_engine(state)
             
-            # state = await generate_strict_content(state)
+            # 🔥 ADD CONTINUITY FIX
+            for i in range(len(state.narrative_arc) - 1):
+                current = state.narrative_arc[i]
+                next_slide = state.narrative_arc[i + 1]
+
+                if not current.get("transition_reason"):
+                    current["transition_reason"] = f"Leads to {next_slide.get('intent', 'next step')}"
             
-            from pipeline.slide_planner import plan_slides
-
-            state = plan_slides(state)
-            # ✅ FIX: create synthetic narrative_arc for content_engine
-            state.narrative_arc = []
-
-            for slide in state.slide_plan:
-                state.narrative_arc.append({
-                    "intent": slide.get("purpose", ""),
-                    "role_in_story": slide.get("section", "general").capitalize(),
-                    "key_message": slide.get("purpose", ""),
-                    "transition_reason": "Structured flow",
-                    "emotional_tone": "neutral"
-                })
             state = await run_content_engine(state)
-            
-            total_slides = len(state.slide_plan or [])
+
+            total_slides = len(state.structured_slides or [])
 
         else:
             state = await run_narrative_engine(state)
+            
+            # 🔥 ADD SAME CONTINUITY FIX HERE ALSO
+            for i in range(len(state.narrative_arc) - 1):
+                current = state.narrative_arc[i]
+                next_slide = state.narrative_arc[i + 1]
+
+                if not current.get("transition_reason"):
+                    current["transition_reason"] = f"Leads to {next_slide.get('intent', 'next step')}"
+            
             state = await run_content_engine(state)
 
     # ── Shared tail (both paths) ──────────────────────────────────
@@ -277,7 +261,20 @@ async def run_pipeline(prompt: str, options: dict = {},
           total_slides=total_slides)
 
     # ── Per-slide visual pipeline (design + template) ─────────────
-    slides = state.structured_slides or []
+    # slides = state.structured_slides or []
+    # 🔥 convert structured_slides → design-compatible format
+    slides = []
+
+    for s in (state.structured_slides or []):
+        slides.append({
+            "slide_id": s.get("slide_id"),
+            "primary_element": s.get("primary_element"),
+            "supporting_elements": s.get("supporting_elements"),
+            "role": s.get("role"),
+            "why_this_slide": s.get("why_this_slide"),
+            "why_next_slide": s.get("why_next_slide"),
+            "emotional_tone": s.get("emotional_tone"),
+        })
     theme = getattr(state, "theme", "modern")
     all_html_slides = []
 
@@ -361,6 +358,17 @@ async def run_pipeline(prompt: str, options: dict = {},
         "structured_slides": [s for s in (state.structured_slides or [])],
         "image_paths": visual_output.get("image_paths", []),
         "pdf_path": visual_output.get("pdf_path"),
+        
+        # 🔥 ADD THIS
+        "reasoning": [
+            {
+                "slide_id": s.get("slide_id"),
+                "role": s.get("role"),
+                "why_this": s.get("why_this_slide"),
+                "why_next": s.get("why_next_slide")
+            }
+            for s in (state.structured_slides or [])
+        ]
     }
 
 

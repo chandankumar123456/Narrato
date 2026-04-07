@@ -50,60 +50,39 @@ _TITLE_ONLY_SLIDE_TYPES = frozenset({
 
 
 def validate_slide_content(slides: list[dict]) -> list[dict]:
-    """Validate structured slides have non-empty content.
-
-    STRICT: Raises SlideValidationError if ANY slide has:
-      - missing or empty content dict
-      - missing title
-      - no content fields beyond title
-
-    Args:
-        slides: List of structured slide dicts with {slide_id, type, content}.
-
-    Returns:
-        The same list (unmodified) if all slides pass validation.
-
-    Raises:
-        SlideValidationError: If any slide fails validation.
+    """Validate structured slides with new format:
+    primary_element + supporting_elements
     """
+
     violations: list[str] = []
 
     for slide in slides:
         slide_id = slide.get("slide_id", "?")
         slide_type = slide.get("type", "unknown")
-        content = slide.get("content", {})
 
-        if not isinstance(content, dict) or not content:
+        primary_element = str(slide.get("primary_element", "")).strip()
+        supporting_elements = slide.get("supporting_elements", [])
+
+        # 🔥 CHECK 1: primary must exist
+        if not primary_element:
             violations.append(
-                f"Slide {slide_id} ({slide_type}): content is empty or not a dict"
+                f"Slide {slide_id} ({slide_type}): missing primary_element"
             )
-            continue
 
-        title = str(content.get("title", "")).strip()
-        primary_element = str(content.get("primary_element", "")).strip()
-        
-        if not title and not primary_element:
-            violations.append(f"Slide {slide_id} ({slide_type}): missing meaningful title and primary_element")
-
-        # At least one content field beyond title (except whitelisted minimal slides)
-        content_keys = {k for k, v in content.items() if k not in ("title", "primary_element") and _is_non_empty(v)}
-        
         is_hero_or_title = str(slide_type).lower() in _TITLE_ONLY_SLIDE_TYPES
-        if not content_keys and not is_hero_or_title:
-            violations.append(
-                f"Slide {slide_id} ({slide_type}): has title but no content body — "
-                f"all fields besides title are empty. Keys: {list(content.keys())}"
-            )
-            
-        # Support element checking for pipeline content if it exists
-        supporting_elements = content.get("supporting_elements", [])
-        if "supporting_elements" in content and not is_hero_or_title:
+
+        # 🔥 CHECK 2: supporting elements (except title slides)
+        if not is_hero_or_title:
             if not isinstance(supporting_elements, list) or len(supporting_elements) == 0:
-                violations.append(f"Slide {slide_id} ({slide_type}): explicitly missing supporting_elements on non-initial slide.")
+                violations.append(
+                    f"Slide {slide_id} ({slide_type}): missing supporting_elements"
+                )
             else:
                 for idx, sup in enumerate(supporting_elements):
                     if len(str(sup).split()) <= 2:
-                        violations.append(f"Slide {slide_id} ({slide_type}): supporting_elements[{idx}] is too short or empty: '{sup}'")
+                        violations.append(
+                            f"Slide {slide_id} ({slide_type}): supporting_elements[{idx}] too short: '{sup}'"
+                        )
 
     if violations:
         for v in violations:
@@ -112,8 +91,6 @@ def validate_slide_content(slides: list[dict]) -> list[dict]:
 
     logger.info("[slide_validator] All %d slides passed strict validation", len(slides))
     return slides
-
-
 def validate_design_components(designs: list[dict]) -> list[dict]:
     """Validate design specs have non-empty components before template rendering.
 

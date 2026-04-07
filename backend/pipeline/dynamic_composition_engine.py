@@ -171,18 +171,28 @@ def clean_text(text):
 
 async def generate_slide_html(slide_data: dict, slide_index: int, total_slides: int, theme_dict: dict, continuity_context: dict, layout_history: list[str], topic: str = "") -> tuple[dict, str, dict]:
     """Generates custom HTML and CSS for a single slide using a multi-step control layer."""
-    content = slide_data.get("content", {})
+    # content = slide_data.get("content", {})
     
-    title = content.get("title") or content.get("heading") or "Untitled"
-    title = clean_text(title)
-    points = content.get("points") or content.get("bullets") or []
+    # title = content.get("title") or content.get("heading") or "Untitled"
+    # title = clean_text(title)
+    # points = content.get("points") or content.get("bullets") or []
+    
+    primary = slide_data.get("primary_element", "")
+    points = slide_data.get("supporting_elements", [])
+    title = primary
+    
+    content = {
+        "title": primary,
+        "points": points
+    }
     
     previous_slide_summary = continuity_context.get("last_slide_summary", "")
     intent_str = slide_data.get("intent", "")
     
     # Step 7: Enforce Role -> Design Binding (role and emotional_tone are within intent_str if mapped perfectly)
     emotional_tone = slide_data.get("emotional_tone", "")
-    role_in_story = slide_data.get("role_in_story", "")
+    # role_in_story = slide_data.get("role_in_story", "")
+    role_in_story = slide_data.get("role", "")
     
     # ── Phase 0: Narrative Transformation (understand → interpret → express) ──
     # Runs BEFORE preprocessing to convert shallow content into story-driven text.

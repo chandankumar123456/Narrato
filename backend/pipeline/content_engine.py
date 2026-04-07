@@ -5,43 +5,29 @@ from services.llm_client import call_llm_json
 
 logger = logging.getLogger(__name__)
 
-# ✅ FIXED: Strong JSON enforcement + supports both pitch & narrative modes
-CONTENT_ENGINE_SYSTEM_PROMPT = """You are a Master Content Composer for presentations.
+CONTENT_ENGINE_SYSTEM_PROMPT = """You are a Presentation Meaning Structurer.
 
-You MUST return STRICT JSON.
+Return STRICT JSON.
 
-OUTPUT FORMAT (VERY IMPORTANT):
+FORMAT:
 {
   "structured_slides": [
     {
       "slide_id": 1,
-      "intent": "string",
-      "content": {
-        "title": "string",
-        "points": ["point1", "point2"]
-      }
+      "intent": "...",
+      "primary_element": "...",
+      "supporting_elements": ["...", "..."]
     }
   ]
 }
 
 RULES:
-- ALWAYS return valid JSON (no extra text)
-- structured_slides must be a list
 - Each slide MUST have:
-    - slide_id (int)
-    - intent (string)
-    - content (DICT) ❗
-- content MUST NOT be empty
-- content MUST be a dictionary
-
-IF presentation_type == "pitch":
-- Use structured bullet points (2–4)
-- Include concrete statements / metrics if possible
-
-IF NOT:
-- Use concise punchlines
-
-DO NOT return empty content under any condition.
+    - 1 strong primary_element
+    - 2–4 supporting_elements
+- Each element under 12 words
+- No paragraphs
+- DO NOT use title/points
 """
 
 def extract_role_behavior(role: str) -> str:
@@ -110,10 +96,8 @@ Return structured_slides with same length.
                 structured_slides.append({
                     "slide_id": i + 1,
                     "intent": arc.get("intent", ""),
-                    "content": {
-                        "title": arc.get("key_message", "Slide"),
-                        "points": ["Content unavailable"]
-                    }
+                    "primary_element": arc.get("key_message", "Slide"),
+                    "supporting_elements": ["Content unavailable"]
                 })
 
         # ✅ Ensure proper structure for ALL slides
@@ -132,11 +116,13 @@ Return structured_slides with same length.
             original_intent = arc_slide.get("intent", "")
             emotional_tone = arc_slide.get("emotional_tone", "neutral")
 
-            slide["intent"] = f"Role: {role} | Behavior: {behavior} | Direct Intent: {original_intent}"
+            slide["intent"] = original_intent
             slide["role_in_story"] = role
             slide["emotional_tone"] = emotional_tone
             slide["type"] = "content_slide"
             slide["slide_id"] = i + 1
+            slide["why_this_slide"] = arc_slide.get("intent", "")
+            slide["why_next_slide"] = arc_slide.get("transition_reason", "")
 
         # rebuild slide_plan
         slide_plan = []
