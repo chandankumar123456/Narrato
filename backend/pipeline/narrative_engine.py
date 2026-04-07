@@ -14,6 +14,36 @@ NARRATIVE_ROLES = [
 
 NARRATIVE_ENGINE_SYSTEM_PROMPT = """You are a world-class Narrative Architect specializing in high-impact presentations.
 
+🔥 BUSINESS PRIORITY OVERRIDE (CRITICAL):
+
+This is an INVESTOR presentation.
+
+MANDATORY REQUIREMENTS:
+- At least ONE slide MUST explain PRICING (with actual numbers, e.g., $20/month, enterprise tiers)
+- At least ONE slide MUST explain REVENUE MODEL or PROJECTIONS (e.g., ARR, growth, scaling)
+- At least ONE slide MUST compare against COMPETITORS (e.g., BI tools, dashboards, AI copilots)
+
+These are NON-NEGOTIABLE.
+These slides MUST appear even if it slightly reduces narrative elegance.
+
+If any of these are missing → OUTPUT IS INVALID → regenerate internally.
+
+---
+
+🔥 INVESTOR MODE OVERRIDE (CRITICAL):
+
+This is an INVESTOR presentation.
+
+MANDATORY:
+- Include at least ONE slide explaining pricing (with numbers)
+- Include at least ONE slide explaining revenue model or projections
+- Include at least ONE slide comparing against competitors
+
+These are REQUIRED.
+If any of these are missing → OUTPUT IS INVALID → regenerate internally.
+
+ ---
+
 Your task is to construct a COMPLETE, CAUSAL, HIGH-TENSION narrative arc.
 
 You must design EXACTLY {{slide_count}} slides.
@@ -133,11 +163,6 @@ Each slide must answer:
 - This failure must show that the current approach is NOT sustainable.
 - It must introduce a real consequence (loss, instability, conflict, or collapse).
 
-Examples of valid failure:
-- System instability becomes unavoidable
-- Tradeoffs accumulate beyond control
-- Local optimization leads to irreversible damage
-
 If the failure is missing or weak → regenerate internally.
 
 ---
@@ -145,70 +170,244 @@ If the failure is missing or weak → regenerate internally.
 12. TENSION ESCALATION (STRICT)
 
 - Each slide must increase pressure until a peak before the solution.
-- Pressure can be:
-  - conflict
-  - inefficiency
-  - hidden cost
-  - instability
-  - risk accumulation
-
-Flat progression is NOT allowed.
+- Flat progression is NOT allowed.
 
 ---
 
 13. NO IDEA DUPLICATION
 
-- No two slides should express the same core idea.
-- If overlap exists → differentiate or remove redundancy.
 - Each slide must introduce a NEW layer of meaning.
 
 ---
 
 14. INEVITABILITY TEST
 
-After constructing the narrative, verify:
-
 - Removing any slide should break the flow
-- Each slide must feel necessary, not optional
 
-If not → regenerate internally
-
- ---
+---
 
 15. IMPACT INTENSITY
 
 - Failure must feel unavoidable and consequential
-- Use language that implies loss, instability, or breakdown
-- Avoid neutral phrasing
 
-Example:
-❌ "system becomes unstable"
-✅ "system begins to fail faster than it can recover"
-
-If failure feels neutral → regenerate internally
-
- ---
+---
 
 FAIL CONDITIONS (DO NOT OUTPUT IF PRESENT):
+- Missing pricing / revenue / competition
 - Weak transitions
 - Missing tension
 - No failure point
 - Repeated ideas
-- Generic phrases
-
-If any fail condition occurs → internally regenerate before output.
 
 ---
 
 FINAL GOAL:
 
-The narrative must feel inevitable.
+The narrative must feel inevitable AND investor-ready.
 
 Each slide should make the audience think:
 "I HAVE to see what comes next."
 
 Return ONLY valid JSON.
 """
+
+# NARRATIVE_ENGINE_SYSTEM_PROMPT = """You are a world-class Narrative Architect specializing in high-impact presentations.
+
+# Your task is to construct a COMPLETE, CAUSAL, HIGH-TENSION narrative arc.
+
+# You must design EXACTLY {{slide_count}} slides.
+
+# You must strictly follow this narrative progression:
+# Context → Problem → Tension → Insight → Solution → Impact → Closure
+
+# You may expand phases across multiple slides, but ORDER MUST NEVER BREAK.
+
+# Every narrative MUST include:
+
+# - A visible breakdown or failure moment
+# - A point where current system clearly stops working
+# - A consequence that makes continuation impossible
+
+# If no failure point exists → regenerate internally
+# Slides must NOT repeat the same core idea.
+# If two slides express same meaning → merge or differentiate.
+
+# ---
+
+# OUTPUT FORMAT (STRICT JSON ONLY):
+
+# {{
+#   "slides": [
+#     {{
+#       "intent": "...",
+#       "role_in_story": "...",
+#       "key_message": "...",
+#       "transition_reason": "...",
+#       "emotional_tone": "...",
+#       "cause": "...",
+#       "tension": "...",
+#       "resolution": "...",
+#       "next_trigger": "..."
+#     }}
+#   ]
+# }}
+
+# ---
+
+# HARD RULES (NON-NEGOTIABLE):
+
+# 1. ONE IDEA PER SLIDE  
+# Each slide must express exactly ONE core idea.
+
+# ---
+
+# 2. CAUSALITY (STRICT)  
+# - Each slide MUST exist because of the previous slide  
+# - "cause" must reference a SPECIFIC outcome or gap from the previous slide  
+# - No generic phrases like "continuing", "next step"
+
+# ---
+
+# 3. FORWARD FORCE (CRITICAL)  
+# - Each slide MUST FORCE the next slide to exist  
+# - "next_trigger" must create pressure, curiosity, or unresolved need  
+# - Weak phrases like "leads to next" are FORBIDDEN
+
+# ---
+
+# 4. TENSION CURVE (MANDATORY)  
+# - Tension must increase from Context → Tension  
+# - There MUST be a peak tension BEFORE Solution  
+# - After Solution, tension must resolve progressively  
+
+# ---
+
+# 5. FAILURE POINT (MANDATORY)  
+# - At least one slide MUST explicitly show failure, limitation, or breakdown  
+# - Without failure → solution is weak → REJECT internally
+
+# ---
+
+# 6. TRANSITIONS (STRICT)  
+# - "transition_reason" must logically connect from previous slide  
+# - Must be specific, not generic  
+# - Minimum 6–12 words explaining WHY this slide follows
+
+# ---
+
+# 7. NO GENERIC LANGUAGE  
+# FORBIDDEN:
+# - "next step"
+# - "leads to"
+# - "introduction"
+# - "overview"
+# - "basics"
+
+# ---
+
+# 8. ROLE CONSISTENCY  
+# Each slide must clearly belong to one of:
+# Context, Problem, Tension, Insight, Solution, Impact, Closure
+
+# No skipping required phases.
+
+# ---
+
+# 9. PROGRESSION QUALITY  
+# Each slide must answer:
+# → Why does this exist now?  
+# → Why must the next slide exist?
+
+# ---
+
+# 10. COMPRESSION  
+# - key_message must be ≤ 12 words  
+# - Must be sharp, not descriptive sentences
+
+# ---
+
+# 11. FAILURE & CONSEQUENCE (CRITICAL)
+
+# - The narrative MUST contain a clear failure or breakdown point before the solution phase.
+# - This failure must show that the current approach is NOT sustainable.
+# - It must introduce a real consequence (loss, instability, conflict, or collapse).
+
+# Examples of valid failure:
+# - System instability becomes unavoidable
+# - Tradeoffs accumulate beyond control
+# - Local optimization leads to irreversible damage
+
+# If the failure is missing or weak → regenerate internally.
+
+# ---
+
+# 12. TENSION ESCALATION (STRICT)
+
+# - Each slide must increase pressure until a peak before the solution.
+# - Pressure can be:
+#   - conflict
+#   - inefficiency
+#   - hidden cost
+#   - instability
+#   - risk accumulation
+
+# Flat progression is NOT allowed.
+
+# ---
+
+# 13. NO IDEA DUPLICATION
+
+# - No two slides should express the same core idea.
+# - If overlap exists → differentiate or remove redundancy.
+# - Each slide must introduce a NEW layer of meaning.
+
+# ---
+
+# 14. INEVITABILITY TEST
+
+# After constructing the narrative, verify:
+
+# - Removing any slide should break the flow
+# - Each slide must feel necessary, not optional
+
+# If not → regenerate internally
+
+#  ---
+
+# 15. IMPACT INTENSITY
+
+# - Failure must feel unavoidable and consequential
+# - Use language that implies loss, instability, or breakdown
+# - Avoid neutral phrasing
+
+# Example:
+# ❌ "system becomes unstable"
+# ✅ "system begins to fail faster than it can recover"
+
+# If failure feels neutral → regenerate internally
+
+#  ---
+
+# FAIL CONDITIONS (DO NOT OUTPUT IF PRESENT):
+# - Weak transitions
+# - Missing tension
+# - No failure point
+# - Repeated ideas
+# - Generic phrases
+
+# If any fail condition occurs → internally regenerate before output.
+
+# ---
+
+# FINAL GOAL:
+
+# The narrative must feel inevitable.
+
+# Each slide should make the audience think:
+# "I HAVE to see what comes next."
+
+# Return ONLY valid JSON.
+# """
 
 def validate_narrative_arc(slides: list, target_count: int) -> list:
     """Validate the strict rules of the narrative arc."""
@@ -316,6 +515,9 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
         - Problem must reflect real user pain (not abstract)
         - Solution must introduce the product clearly
         - Include market and business implications in later slides
+        - Include a slide explaining pricing model
+        - Include a slide explaining revenue potential or projections
+        - Include a slide comparing against competitors
 
         Remember:
         Design exactly {state.slide_count} slides following:
@@ -345,6 +547,11 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
             for slide in valid_slides:
                 slide["why_this_slide"] = slide.get("cause", "")
                 slide["why_next_slide"] = slide.get("next_trigger", "")
+            from pipeline.investor_enforcer import enforce_investor_structure
+
+            # 🔥 enforce investor completeness
+            valid_slides = enforce_investor_structure(valid_slides)
+
             return state.model_copy(update={"narrative_arc": valid_slides})
             
         except NarrativeEngineError as e:

@@ -5,7 +5,7 @@ async def generate_business_context(topic: str) -> dict:
     system_prompt = """
 You are a startup strategist.
 
-Convert the given idea into a REAL, CONCRETE startup.
+Convert the idea into a REAL investor-ready startup.
 
 Return STRICT JSON:
 
@@ -18,21 +18,26 @@ Return STRICT JSON:
   "key_features": [],
   "market": "",
   "monetization": "",
+  "pricing": "",
+  "revenue_projection": "",
+  "competition": "",
   "differentiation": ""
 }
 
-Rules:
-- Must be realistic
-- No abstract words like "system" without explanation
-- Each field must be filled
-- Think like investor pitch
+RULES:
+- Must be concrete
+- Must include NUMBERS where possible
+- Pricing must include actual values (e.g. $20/month, enterprise tiers)
+- Revenue must include projections (e.g. $1M ARR in 2 years)
+- Competition must name real alternatives (BI tools, dashboards, etc.)
+- Differentiation must clearly say WHY better
+- No abstract language
 """
 
     user_prompt = f"Idea: {topic}"
 
     result = await call_llm_json(system_prompt, user_prompt)
 
-    # HARD VALIDATION
     required = [
         "product_name",
         "product_type",
@@ -42,6 +47,9 @@ Rules:
         "key_features",
         "market",
         "monetization",
+        "pricing",
+        "revenue_projection",
+        "competition",
         "differentiation"
     ]
 
