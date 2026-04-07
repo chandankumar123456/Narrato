@@ -67,10 +67,59 @@ Transform content so that it:
 5. Language should feel natural and human, not robotic
 6. Preserve ALL factual data — numbers, names, metrics, timelines
 7. If the content already has strong narrative quality, refine but do not rewrite from scratch
-8. Output must be 2–4 meaningful sentences — no more, no less
-9. Never invent facts that are not present in the raw content
+8. Output must be 1–3 sentences.
+9. Each sentence must be sharp and purposeful.
+10.Avoid long explanatory paragraphs.
+11. Never invent facts that are not present in the raw content
+
+--- 
+
+# CONTINUITY (CRITICAL)
+
+You are part of a sequence of slides.
+
+- You MUST continue from the previous slide
+- Do NOT restart the topic
+- Do NOT repeat the same idea
+- Each slide must feel like progression
 
 ---
+
+# TENSION BUILDING
+
+Each slide must move forward in intensity:
+
+- context → explain situation
+- problem → expose what is wrong
+- escalation → make problem worse
+- breaking_point → show consequence
+- solution → introduce clear answer
+- mechanism → explain how it works
+- outcome → show transformation
+
+You MUST follow the narrative role strictly.
+
+---
+
+# ROLE BEHAVIOR
+
+Based on narrative role:
+
+- context: introduce situation clearly
+- problem: expose gap or inefficiency
+- escalation: deepen problem or show scale
+- breaking_point: highlight consequence or urgency
+- solution: present clear shift or answer
+- mechanism: explain how solution works
+- outcome: describe final improvement
+
+---
+
+# CONNECTION RULE
+
+Each output must implicitly answer:
+
+"Why does the next slide exist?"
 
 # OUTPUT FORMAT
 
@@ -123,6 +172,7 @@ async def transform_narrative(
     topic: str,
     narrative_role: str = "",
     emotional_tone: str = "",
+    previous_slide: str = "",
 ) -> dict:
     """Transform raw slide content into story-driven narrative text.
 
@@ -159,9 +209,10 @@ async def transform_narrative(
         f"Overall topic: {topic}\n"
         f"Narrative role: {narrative_role or 'general'}\n"
         f"Emotional tone: {emotional_tone or 'neutral'}\n"
+        f"\nPrevious slide summary:\n{previous_slide}\n"
         f"\nRaw content:\n{content_str}"
     )
-
+    
     try:
         result = await call_llm_json(NARRATIVE_TRANSFORM_PROMPT, user_prompt)
 

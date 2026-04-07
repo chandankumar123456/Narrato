@@ -60,7 +60,7 @@ MANDATORY RULES:
 1. CONTENT PRESERVATION: Keep meaning intact. Preserve causal or explanatory depth. NEVER reduce content to single words, abstract labels (like "Growth"), or remove explanatory meaning.
 2. CONTENT STRUCTURE: Output must contain "intent", "title", "primary_element", "supporting_elements", and "entities".
 3. PRIMARY ELEMENT VS TITLE: `primary_element` MUST contain the strongest meaning. `title` and `primary_element` must NOT overwrite each other. If a title is missing, derive it from the primary_element.
-4. SUPPORTING ELEMENTS: Every non-initial slide MUST have 1 to 3 "supporting_elements". Each element must be a meaningful line of 8-12 words. Extract these from the narrative text — each should carry a distinct supporting idea.
+4. SUPPORTING ELEMENTS: Every non-initial slide MUST have 1 to 3 "supporting_elements". Each element must be a clear, natural sentence (6–15 words).Do NOT force artificial phrasing.Maintain flow between elements. Exact wording is NOT required — preserve meaning, not phrasing.Supporting elements must align with narrative meaning. They should reflect ideas from the narrative, even if slightly rephrased.express ONE idea only. avoid long compound sentences. avoid combining multiple thoughts
 5. NARRATIVE DEPTH: If `_narrative_text` is present, your output MUST reflect its depth. Do NOT flatten the narrative back into shallow bullet points.
 
 Output a JSON object with:
@@ -84,11 +84,44 @@ CRITICAL: A VISUAL PLAN is provided with each slide. You MUST follow it EXACTLY:
 - NARRATIVE ROLE: The visual intent describes the emotional feel — your design must reflect it.
 
 DESIGN RULES (MANDATORY):
-1. ONE DOMINANT ELEMENT: Use the provided `primary_element`. You MUST style it to be 2x-4x larger or more prominent than secondary elements.
-2. ALL SUPPORTING ELEMENTS VISIBLE: Ensure every item in `supporting_elements` is explicitly rendered in the HTML. No summarization, omission, or transformation. Output the exact or semantically equivalent text.
+1. ONE DOMINANT ELEMENT: The primary_element MUST visually dominate the slide. It must be clearly the first thing seen. It must not be fragmented or broken. It must remain readable as a full sentence.
+2. ALL SUPPORTING ELEMENTS VISIBLE: Ensure every item in `supporting_elements` is represented in the HTML. You may slightly rephrase for better visual clarity, but do NOT omit any idea or add unrelated content.
 3. LAYOUT FROM VISUAL PLAN: Follow the layout directive from the VISUAL PLAN section. Do NOT default to centered vertical stacking unless the plan says center_focus.
 4. WHITESPACE ENFORCEMENT: Maintain 40-60% empty space across the layout. Do not make the slide dense.
 5. DESIGN CONSISTENCY: Enforce spacing, typography, and color palette from the theme exactly. Use relative sizing (rem, em) or percentages (%), not random fixed pixel sets.
+
+DESIGN SIMPLICITY RULE:
+
+- Prefer clean, minimal layouts over creative typography
+- Do NOT experiment with unusual text arrangements
+- Clarity > creativity
+- Use standard readable layouts unless explicitly required
+
+TEXT RENDERING RULE (CRITICAL):
+- Never break words into individual letters
+- Never stack letters vertically unless explicitly required
+- Do NOT apply letter-spacing that separates characters unnaturally
+- All text must be readable as normal words and sentences
+
+TEXT STRICTNESS RULE (NON-NEGOTIABLE):
+
+- NEVER split words into individual letters
+- NEVER apply extreme letter-spacing
+- NEVER stack characters vertically
+- Words must always appear as complete readable units
+
+If this rule is violated, the output is INVALID
+
+READABILITY RULE:
+- Text must always be horizontally readable
+- Avoid excessive line breaks inside words
+- Avoid splitting words across lines unnaturally
+
+LAYOUT SAFETY RULE:
+
+- All content must fit within the visible slide area (1920x1080)
+- Do NOT position elements outside viewport
+- Avoid absolute positioning that pushes content out of bounds
 
 Context constraints: No images. Only vanilla CSS/HTML. 
 
@@ -126,6 +159,7 @@ IMPORTANT: Only return JSON. No markdown backticks or preamble.
 async def generate_slide_html(slide_data: dict, slide_index: int, total_slides: int, theme_dict: dict, continuity_context: dict, layout_history: list[str], topic: str = "") -> tuple[dict, str, dict]:
     """Generates custom HTML and CSS for a single slide using a multi-step control layer."""
     content = slide_data.get("content", {})
+    previous_slide_summary = continuity_context.get("last_slide_summary", "")
     intent_str = slide_data.get("intent", "")
     
     # Step 7: Enforce Role -> Design Binding (role and emotional_tone are within intent_str if mapped perfectly)
@@ -142,6 +176,7 @@ async def generate_slide_html(slide_data: dict, slide_index: int, total_slides: 
         topic=topic,
         narrative_role=role_in_story,
         emotional_tone=emotional_tone,
+        previous_slide=previous_slide_summary,   # 🔥 NEW
     )
     
     narrative_text = narrative_result.get("narrative_text", "")
@@ -167,8 +202,46 @@ async def generate_slide_html(slide_data: dict, slide_index: int, total_slides: 
         continuity_context["entities"].extend(narrative_entities)
         continuity_context["entities"] = list(set(continuity_context["entities"]))[-10:]
     
-    base_prompt = f"Intent/Role/Tone: {intent_str} | {role_in_story} | {emotional_tone}\nNarrative Angle: {narrative_angle}\nPrevious Entities: {continuity_context.get('entities', [])}\nGlobal Keywords: {continuity_context.get('global_keywords', [])}\nContent:\n{enriched_content}"
-    
+    # base_prompt = f"Intent/Role/Tone: {intent_str} | {role_in_story} | {emotional_tone}\nNarrative Angle: {narrative_angle}\nPrevious Entities: {continuity_context.get('entities', [])}\nGlobal Keywords: {continuity_context.get('global_keywords', [])}\nContent:\n{enriched_content}"
+    base_prompt = f"""
+Previous Slide Summary:
+{previous_slide_summary}
+
+You are generating a presentation slide in a strict narrative sequence.
+
+STRICT RULES:
+- This slide MUST logically follow the previous slide
+- Do NOT repeat ideas
+- Do NOT restart the topic
+- You MUST move the story forward
+
+NARRATIVE REQUIREMENT:
+- If previous slide introduced a problem → deepen it
+- If previous slide explained → escalate it
+- If previous slide escalated → reach consequence
+
+TENSION RULE:
+- Each slide must increase intensity compared to previous slide.
+- Do not keep same level of importance.
+
+ROLE BEHAVIOR:
+- context: introduce situation clearly
+- problem: expose what is wrong
+- escalation: make problem worse
+- breaking_point: show consequence
+- solution: provide clear answer
+- mechanism: explain how it works
+- outcome: show transformation
+
+Your goal is progression, not explanation.
+
+Intent/Role/Tone: {intent_str} | {role_in_story} | {emotional_tone}
+Narrative Angle: {narrative_angle}
+
+Content:
+{enriched_content}
+"""
+
     # Phase 1: Preprocessing & Content Reduction
     preprocessing_result = {}
     preprocess_feedback = ""
@@ -218,9 +291,11 @@ async def generate_slide_html(slide_data: dict, slide_index: int, total_slides: 
                     "intent": intent_str or "content",
                     "title": safe_title,
                     "primary_element": safe_title,
-                    "supporting_elements": ["This section covers key points about the topic."] if slide_index > 0 else [],
+                    # "supporting_elements": ["This section covers key points about the topic."] if slide_index > 0 else [],
+                    "supporting_elements": [f"Key insight about {topic}"] if slide_index > 0 else [],
                     "entities": []
                 }
+    continuity_context["last_slide_summary"] = preprocessing_result.get("primary_element", "")
 
     # Step 8: Update memory tracking
     new_entities = preprocessing_result.get("entities", [])
@@ -358,8 +433,9 @@ async def generate_slide_html(slide_data: dict, slide_index: int, total_slides: 
             enforcement_prompt += f"  - \"{elem}\"\n"
         enforcement_prompt += (
             f"\nFIX DIRECTIVE: {fix_dir}\n"
-            f"You MUST include ALL the above text EXACTLY in your HTML output. "
-            f"Do NOT summarize, rewrite, or omit any of them."
+            f"You MUST preserve the meaning of all elements.\n"
+            f"You may slightly rephrase for visual clarity.\n"
+            f"Do NOT omit any idea or add unrelated content."
         )
         try:
             fix_render = await call_llm_json(RENDER_PROMPT, enforcement_prompt)
@@ -369,8 +445,13 @@ async def generate_slide_html(slide_data: dict, slide_index: int, total_slides: 
                 # Verify the fix actually worked
                 still_missing = []
                 for elem in missing:
-                    if isinstance(elem, str) and elem.strip() not in fixed_html:
-                        still_missing.append(elem)
+                    if isinstance(elem, str):
+                        elem_text = elem.strip()
+                        
+                        # allow partial + semantic match
+                        if elem_text not in fixed_html:
+                            if len(elem_text) > 30 and elem_text[:30] not in fixed_html:
+                                still_missing.append(elem)
                 if not still_missing:
                     html_content = fixed_html
                     css_content = fixed_css
@@ -443,6 +524,19 @@ async def run_dynamic_composition_engine(slides: list, state_theme: str, topic: 
             inferred_topic = first_content.get("title", "") or first_content.get("punchline", "")
     
     for idx, slide_data in enumerate(slides):
+        role_map = [
+            "context",
+            "problem",
+            "escalation",
+            "breaking_point",
+            "solution",
+            "mechanism",
+            "outcome"
+        ]
+
+        if idx < len(role_map):
+            slide_data["role_in_story"] = role_map[idx]
+        
         design, slide_html, continuity_context = await generate_slide_html(
             slide_data, idx, total_slides, theme_dict, continuity_context, layout_history,
             topic=inferred_topic,
