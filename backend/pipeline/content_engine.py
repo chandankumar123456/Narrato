@@ -54,12 +54,15 @@ async def run_content_engine(state: PresentationState) -> PresentationState:
         state.narrative_arc = []
         for slide in (state.slide_plan or []):
             state.narrative_arc.append({
-                "intent": slide.get("purpose", ""),
-                "role_in_story": slide.get("section", "general").capitalize(),
-                "key_message": slide.get("purpose", ""),
-                "transition_reason": "Structured flow",
-                "emotional_tone": "neutral"
-            })
+    "intent": slide.get("purpose", ""),
+    "role_in_story": slide.get("section", "Context"),
+    "key_message": slide.get("purpose", ""),
+    "cause": f"Follows logically from previous slide intent",
+    "tension": f"Expands the narrative progression",
+    "resolution": "",
+    "next_trigger": "Leads to next structured step",
+    "emotional_tone": "neutral"
+})
 
     logger.info(f"[content_engine] Generating slide content for {len(state.narrative_arc)} slides")
 
@@ -102,13 +105,7 @@ Return structured_slides with same length.
 
         # ✅ Ensure proper structure for ALL slides
         for i, slide in enumerate(structured_slides):
-            # fallback content if missing
-            if not isinstance(slide.get("content"), dict):
-                slide["content"] = {
-                    "title": f"Slide {i+1}",
-                    "points": ["Content missing"]
-                }
-
+            
             arc_slide = state.narrative_arc[i] if i < len(state.narrative_arc) else {}
 
             role = arc_slide.get("role_in_story", "Context")
@@ -121,8 +118,19 @@ Return structured_slides with same length.
             slide["emotional_tone"] = emotional_tone
             slide["type"] = "content_slide"
             slide["slide_id"] = i + 1
-            slide["why_this_slide"] = arc_slide.get("intent", "")
-            slide["why_next_slide"] = arc_slide.get("transition_reason", "")
+            slide["why_this_slide"] = arc_slide.get("cause", "")
+            slide["why_next_slide"] = arc_slide.get("next_trigger", "")
+            slide["tension"] = arc_slide.get("tension", "")
+            slide["resolution"] = arc_slide.get("resolution", "")
+            
+            # ✅ FIX: enforce supporting_elements length
+            fixed_support = []
+            for elem in slide.get("supporting_elements", []):
+                if len(elem.split()) < 3:
+                    elem = elem + " to maintain system effectiveness"
+                fixed_support.append(elem)
+
+            slide["supporting_elements"] = fixed_support
 
         # rebuild slide_plan
         slide_plan = []

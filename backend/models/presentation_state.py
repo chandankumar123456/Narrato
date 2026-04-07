@@ -43,6 +43,9 @@ class PresentationState(BaseModel):
     metadata: Optional[dict] = None
     narrative_arc: Optional[list[dict]] = None
 
+    # 🔥 NEW (REQUIRED FIX)
+    business_context: Optional[dict] = None
+
     # Strict mode fields
     user_schema: Optional[dict] = None
     generation_mode: Optional[str] = None  # "strict" | "default" | None
@@ -61,7 +64,7 @@ class PresentationState(BaseModel):
     @model_validator(mode="after")
     def enforce_strict_slide_count(self):
         """In strict mode, override the clamped slide_count with the exact
-        schema-derived value.  Strict mode requires EXACT counts — no guards."""
+        schema-derived value. Strict mode requires EXACT counts — no guards."""
         if self.generation_mode == "strict" and self.user_schema:
             n = self.user_schema.get("examples_required", 0)
             exact = 2 + n + 1  # title + definition + N examples + summary

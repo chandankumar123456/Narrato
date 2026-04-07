@@ -12,25 +12,202 @@ NARRATIVE_ROLES = [
     "Context", "Problem", "Tension", "Insight", "Solution", "Impact", "Closure"
 ]
 
-NARRATIVE_ENGINE_SYSTEM_PROMPT = f"""You are a master Narrative Architect for presentations.
-Your task is to design a complete story arc that emotionally and logically hooks the audience, taking them from the initial context all the way to a powerful closure.
+NARRATIVE_ENGINE_SYSTEM_PROMPT = """You are a world-class Narrative Architect specializing in high-impact presentations.
+
+Your task is to construct a COMPLETE, CAUSAL, HIGH-TENSION narrative arc.
 
 You must design EXACTLY {{slide_count}} slides.
-You must use the following Narrative Progression in order: {NARRATIVE_ROLES}. 
-Since to total slide count may be different from 7, you must expand or contract the time spent in each phase naturally without breaking the sequential flow.
 
-HARD CONSTRAINTS:
-1. OUTPUT: Return a JSON object with a single key "slides", which is a list of exactly {{slide_count}} objects.
-2. SLIDE INTENT DEFINITION: Each slide object MUST contain exactly these keys:
-   - "intent": What layout or behavioral intent this slide serves (e.g. hook, problem_reveal, stark_contrast, solution_intro, data_proof).
-   - "role_in_story": Must be one of the stages: Context, Problem, Tension, Insight, Solution, Impact, Closure.
-   - "key_message": The single main idea of the slide (must be just ONE idea, not compounded).
-   - "transition_reason": WHY this slide comes immediately after the previous one (For slide 1, just write "Start"). It MUST justify its existence logically.
-   - "emotional_tone": The emotional weight of the slide (e.g. calm, urgent, grim, lightbulb, confident).
-3. PACING: One idea per slide. Progressive reveal of information. Do not info-dump.
-4. TRANSITION STRENGTH: The reasoning connecting slide N to N-1 must be unbreakable.
+You must strictly follow this narrative progression:
+Context → Problem → Tension → Insight → Solution → Impact → Closure
 
-Output MUST be valid JSON only, without markdown wrapping or backticks.
+You may expand phases across multiple slides, but ORDER MUST NEVER BREAK.
+
+Every narrative MUST include:
+
+- A visible breakdown or failure moment
+- A point where current system clearly stops working
+- A consequence that makes continuation impossible
+
+If no failure point exists → regenerate internally
+Slides must NOT repeat the same core idea.
+If two slides express same meaning → merge or differentiate.
+
+---
+
+OUTPUT FORMAT (STRICT JSON ONLY):
+
+{{
+  "slides": [
+    {{
+      "intent": "...",
+      "role_in_story": "...",
+      "key_message": "...",
+      "transition_reason": "...",
+      "emotional_tone": "...",
+      "cause": "...",
+      "tension": "...",
+      "resolution": "...",
+      "next_trigger": "..."
+    }}
+  ]
+}}
+
+---
+
+HARD RULES (NON-NEGOTIABLE):
+
+1. ONE IDEA PER SLIDE  
+Each slide must express exactly ONE core idea.
+
+---
+
+2. CAUSALITY (STRICT)  
+- Each slide MUST exist because of the previous slide  
+- "cause" must reference a SPECIFIC outcome or gap from the previous slide  
+- No generic phrases like "continuing", "next step"
+
+---
+
+3. FORWARD FORCE (CRITICAL)  
+- Each slide MUST FORCE the next slide to exist  
+- "next_trigger" must create pressure, curiosity, or unresolved need  
+- Weak phrases like "leads to next" are FORBIDDEN
+
+---
+
+4. TENSION CURVE (MANDATORY)  
+- Tension must increase from Context → Tension  
+- There MUST be a peak tension BEFORE Solution  
+- After Solution, tension must resolve progressively  
+
+---
+
+5. FAILURE POINT (MANDATORY)  
+- At least one slide MUST explicitly show failure, limitation, or breakdown  
+- Without failure → solution is weak → REJECT internally
+
+---
+
+6. TRANSITIONS (STRICT)  
+- "transition_reason" must logically connect from previous slide  
+- Must be specific, not generic  
+- Minimum 6–12 words explaining WHY this slide follows
+
+---
+
+7. NO GENERIC LANGUAGE  
+FORBIDDEN:
+- "next step"
+- "leads to"
+- "introduction"
+- "overview"
+- "basics"
+
+---
+
+8. ROLE CONSISTENCY  
+Each slide must clearly belong to one of:
+Context, Problem, Tension, Insight, Solution, Impact, Closure
+
+No skipping required phases.
+
+---
+
+9. PROGRESSION QUALITY  
+Each slide must answer:
+→ Why does this exist now?  
+→ Why must the next slide exist?
+
+---
+
+10. COMPRESSION  
+- key_message must be ≤ 12 words  
+- Must be sharp, not descriptive sentences
+
+---
+
+11. FAILURE & CONSEQUENCE (CRITICAL)
+
+- The narrative MUST contain a clear failure or breakdown point before the solution phase.
+- This failure must show that the current approach is NOT sustainable.
+- It must introduce a real consequence (loss, instability, conflict, or collapse).
+
+Examples of valid failure:
+- System instability becomes unavoidable
+- Tradeoffs accumulate beyond control
+- Local optimization leads to irreversible damage
+
+If the failure is missing or weak → regenerate internally.
+
+---
+
+12. TENSION ESCALATION (STRICT)
+
+- Each slide must increase pressure until a peak before the solution.
+- Pressure can be:
+  - conflict
+  - inefficiency
+  - hidden cost
+  - instability
+  - risk accumulation
+
+Flat progression is NOT allowed.
+
+---
+
+13. NO IDEA DUPLICATION
+
+- No two slides should express the same core idea.
+- If overlap exists → differentiate or remove redundancy.
+- Each slide must introduce a NEW layer of meaning.
+
+---
+
+14. INEVITABILITY TEST
+
+After constructing the narrative, verify:
+
+- Removing any slide should break the flow
+- Each slide must feel necessary, not optional
+
+If not → regenerate internally
+
+ ---
+
+15. IMPACT INTENSITY
+
+- Failure must feel unavoidable and consequential
+- Use language that implies loss, instability, or breakdown
+- Avoid neutral phrasing
+
+Example:
+❌ "system becomes unstable"
+✅ "system begins to fail faster than it can recover"
+
+If failure feels neutral → regenerate internally
+
+ ---
+
+FAIL CONDITIONS (DO NOT OUTPUT IF PRESENT):
+- Weak transitions
+- Missing tension
+- No failure point
+- Repeated ideas
+- Generic phrases
+
+If any fail condition occurs → internally regenerate before output.
+
+---
+
+FINAL GOAL:
+
+The narrative must feel inevitable.
+
+Each slide should make the audience think:
+"I HAVE to see what comes next."
+
+Return ONLY valid JSON.
 """
 
 def validate_narrative_arc(slides: list, target_count: int) -> list:
@@ -43,14 +220,27 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
 
     roles_seen = []
     for i, slide in enumerate(slides):
-        required_keys = {"intent", "role_in_story", "key_message", "transition_reason", "emotional_tone"}
+        required_keys = {
+    "intent",
+    "role_in_story",
+    "key_message",
+    "transition_reason",
+    "emotional_tone",
+    "cause",
+    "tension",
+    "resolution",
+    "next_trigger"
+}
         if not required_keys.issubset(set(slide.keys())):
             raise NarrativeEngineError(f"Slide {i+1} is missing required keys.")
         roles_seen.append(slide.get("role_in_story", ""))
 
         # Check for meaningful transitions
         transition = slide.get("transition_reason", "")
-        if i > 0 and len(str(transition).split()) < 3:
+        if i > 0 and (
+            len(str(transition).split()) < 5 or
+            "next" in transition.lower()
+        ):
             # Reject weak reasoning or missing transitions
             raise NarrativeEngineError(f"Slide {i+1} has weak or missing transition reasoning: '{transition}'")
 
@@ -67,34 +257,94 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
     return slides
 
 
-async def run_narrative_engine(state: PresentationState) -> PresentationState:
+async def run_narrative_engine(state: PresentationState, business_context: dict = None) -> PresentationState:
     """Generate the presentation's narrative arc mapping out slide intents."""
-    # ── Skip narrative for investor mode ─────────────────────
-    if getattr(state, "deck_mode", "general") == "investor":
-        return state
     logger.info(f"[narrative_engine] Building story arc for {state.slide_count} slides...")
 
-    system_prompt = NARRATIVE_ENGINE_SYSTEM_PROMPT.format(slide_count=state.slide_count)
-    user_prompt = f"""Topic: {state.topic}
-Type: {state.presentation_type}
-Audience: {state.audience}
-Tone: {state.tone}
+    business_text = ""
 
-Remember to design exactly {state.slide_count} slides following the narrative progression context -> closure.
-Output strictly JSON.
-"""
+    if business_context:
+        business_text = f"""
+
+    IMPORTANT: This is NOT a generic presentation.
+    This is a STARTUP / PRODUCT narrative.
+
+    PRODUCT DETAILS:
+
+    Product Name: {business_context['product_name']}
+    Product Type: {business_context['product_type']}
+    Target User: {business_context['target_user']}
+
+    Core Problem:
+    {business_context['problem']}
+
+    Solution:
+    {business_context['solution']}
+
+    Key Features:
+    {business_context['key_features']}
+
+    Market Context:
+    {business_context['market']}
+
+    Business Model:
+    {business_context['monetization']}
+
+    Differentiation:
+    {business_context['differentiation']}
+
+    MANDATE:
+    - Narrative MUST revolve around THIS PRODUCT
+    - Problem must match THIS problem
+    - Solution must match THIS solution
+    - Do NOT generate abstract/system-level philosophy
+    """
+
+    system_prompt = NARRATIVE_ENGINE_SYSTEM_PROMPT.format(slide_count=state.slide_count)
+    user_prompt = f"""
+        {business_text}
+
+        Topic: {state.topic}
+        Type: {state.presentation_type}
+        Audience: {state.audience}
+        Tone: {state.tone}
+
+        You are building a PRODUCT / STARTUP narrative.
+
+        STRICT REQUIREMENTS:
+        - The story MUST be about the product defined above
+        - Problem must reflect real user pain (not abstract)
+        - Solution must introduce the product clearly
+        - Include market and business implications in later slides
+
+        Remember:
+        Design exactly {state.slide_count} slides following:
+        Context → Problem → Tension → Insight → Solution → Impact → Closure
+
+        Output strictly JSON.
+    """
 
     max_retries = 2
     for attempt in range(max_retries):
         try:
             result = await call_llm_json(system_prompt, user_prompt)
             slides = result.get("slides", [])
+
+            # ✅ FIX: auto-correct slide count
+            if len(slides) < state.slide_count:
+                # duplicate last slide structure to fill
+                while len(slides) < state.slide_count:
+                    slides.append(slides[-1])
+
+            elif len(slides) > state.slide_count:
+                slides = slides[:state.slide_count]
+
             valid_slides = validate_narrative_arc(slides, state.slide_count)
             
             # Map valid slides to the state
             for slide in valid_slides:
-                slide["why_this_slide"] = slide.get("intent", "")
-                slide["why_next_slide"] = slide.get("transition_reason", "")
+                slide["why_this_slide"] = slide.get("cause", "")
+                slide["why_next_slide"] = slide.get("next_trigger", "")
             return state.model_copy(update={"narrative_arc": valid_slides})
             
         except NarrativeEngineError as e:
@@ -111,11 +361,14 @@ Output strictly JSON.
             "intent": "general",
             "role_in_story": NARRATIVE_ROLES[role_idx],
             "key_message": f"Core point {i+1} for {state.topic}",
-            "transition_reason": "Moving to next point" if i > 0 else "Start",
+            "transition_reason": "This creates need for next step" if i > 0 else "Start",
             "emotional_tone": "neutral",
             
-            # 🔥 ADD
-            "why_this_slide": f"Core point {i+1}",
-            "why_next_slide": "Leads to next point"
+            "cause": f"This step follows previous idea",
+            "tension": f"Increasing importance of step {i+1}",
+            "resolution": "",
+            "next_trigger": f"This creates need for step {i+2}",
+            "why_this_slide": f"This step continues logic",
+            "why_next_slide": "This creates need for next step"
         })
     return state.model_copy(update={"narrative_arc": fallback_arc})
