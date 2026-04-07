@@ -569,7 +569,7 @@ def _resolve_output_dir(job_id: str) -> str:
     return visual_dir
 
 
-def _inject_fallback_slides(state: "PresentationState") -> "PresentationState":
+def _inject_fallback_slides(state: "PresentationState", expected_count: int | None = None) -> "PresentationState":
     """Inject minimal fallback slides so the pipeline always produces output."""
     fallback_slides = [
         _fallback_structured_slide(state, 1, "Problem"),
@@ -581,13 +581,16 @@ def _inject_fallback_slides(state: "PresentationState") -> "PresentationState":
         {"slide_id": 2, "section": "solution", "purpose": "Fallback solution framing", "type": "content_slide"},
         {"slide_id": 3, "section": "ask", "purpose": "Fallback funding ask", "type": "content_slide"},
     ]
+    target_count = expected_count or max(3, int(getattr(state, "slide_count", 3) or 3))
     logger.warning("[pipeline] Using %d fallback slides", len(fallback_slides))
-    return state.model_copy(
+    updated = state.model_copy(
         update={
             "slide_plan": fallback_plan,
             "structured_slides": fallback_slides,
         }
     )
+    _repair_structured_slide_count(updated, target_count)
+    return updated
 
 
 def _write_intelligence_report(state) -> None:
