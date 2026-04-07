@@ -54,6 +54,41 @@ def find_role(slides: List[Dict], target: str) -> bool:
     return False
 
 
+def _has_explicit_role(slides: List[Dict], target: str) -> bool:
+    target_l = target.lower()
+    for s in slides:
+        role = normalize_role(s.get("role_in_story", "") or s.get("role", ""))
+        if target_l in role:
+            return True
+    return False
+
+
+def _normalize_narrative_roles(slides: List[Dict]) -> List[Dict]:
+    normalized = [dict(s) for s in (slides or [])]
+    consumed_indices: set[int] = set()
+
+    def _retag(source_keyword: str, target_role: str) -> bool:
+        if _has_explicit_role(normalized, target_role):
+            return True
+        for idx, slide in enumerate(normalized):
+            if idx in consumed_indices:
+                continue
+            role_text = normalize_role(slide.get("role_in_story", "") or slide.get("role", ""))
+            if source_keyword in role_text:
+                slide["role_in_story"] = target_role
+                slide["role"] = target_role
+                consumed_indices.add(idx)
+                return True
+        return False
+
+    # Required normalization mapping
+    _retag("solution", "Product")
+    _retag("solution", "Business Model")
+    _retag("impact", "Financials")
+    _retag("closure", "Funding Ask")
+    return normalized
+
+
 def inject_slide(slides: List[Dict], role: str) -> Dict:
     """
     Creates a hard fallback slide if missing
@@ -134,7 +169,7 @@ def _trim_to_target_count(slides: List[Dict], target_count: int) -> List[Dict]:
     while len(trimmed) > target_count and idx >= 0:
         candidate = trimmed[idx]
         probe = trimmed[:idx] + trimmed[idx + 1:]
-        if all(find_role(probe, role) for role in REQUIRED_ROLES):
+        if all(_has_explicit_role(probe, role) for role in REQUIRED_ROLES):
             trimmed = probe
         idx -= 1
     return trimmed[:target_count]
@@ -166,10 +201,10 @@ def enforce_investor_structure(slides: List[Dict], target_count: int | None = No
     Injects missing slides.
     """
 
-    enforced = list(slides or [])
+    enforced = _normalize_narrative_roles(slides)
 
     for role in REQUIRED_ROLES:
-        if not find_role(enforced, role):
+        if not _has_explicit_role(enforced, role):
             enforced.append(inject_slide(enforced, role))
 
     if target_count is not None:

@@ -505,10 +505,7 @@ def _repair_narrative_fields(slides: list[dict], topic: str) -> list[dict]:
             next_role = slides[i + 1].get("role_in_story", "next phase") if i + 1 < total else "decision"
             slide["next_trigger"] = f"This unresolved pressure now forces the {next_role} slide"
 
-        if _is_weak(slide.get("tension")):
-            slide["tension"] = _phase_tension(i, total, slide.get("role_in_story", ""))
-        else:
-            slide["tension"] = _phase_tension(i, total, slide.get("role_in_story", ""))
+        slide["tension"] = _phase_tension(i, total, slide.get("role_in_story", ""))
 
         # Inevitability reinforcement for weak transition chains
         transition_reason = str(slide.get("transition_reason", "")).strip()
