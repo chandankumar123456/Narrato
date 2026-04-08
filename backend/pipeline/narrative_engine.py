@@ -577,6 +577,59 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
 
         ---
 
+        NARRATIVE DISCIPLINE REQUIREMENTS (MANDATORY):
+
+        1. EARLY PRODUCT ANCHORING
+        * The product MUST be clearly introduced immediately after the problem.
+        * Do NOT delay product explanation to later slides.
+        * The audience must understand what is being built early.
+
+        2. FORWARD-ONLY FLOW (STRICT)
+        * Once a concept is introduced, DO NOT return to it again.
+        * Do NOT reintroduce the problem after moving to solution.
+        * Do NOT jump backward in narrative.
+        * The story must move strictly forward.
+
+        3. NO REPETITION
+        * Each slide must introduce NEW information.
+        * Do NOT repeat the same idea using different wording.
+        * If two slides express similar meaning → differentiate them clearly.
+
+        4. NO META CONTENT
+        FORBIDDEN:
+        * Slides about “product must be defined”
+        * Slides about “market must be defined”
+        * Slides that discuss how to build the pitch itself
+        All slides must be actual content, not commentary.
+
+        5. PRODUCT CLARITY (MANDATORY)
+        * Clearly define:
+          * what the product is
+          * what it does
+          * how it solves the problem
+        * Avoid abstract descriptions like “ecosystem” without grounding.
+
+        6. CONTINUOUS STORY FLOW
+        Each slide must:
+        * logically follow from previous slide
+        * naturally lead to the next slide
+        * feel like part of one continuous argument
+
+        7. INVESTOR READINESS
+        Ensure the narrative clearly contains:
+        * problem
+        * impact
+        * solution
+        * product clarity
+        * revenue model
+        * competition
+        * market
+        * projection
+        * funding ask
+        These must appear naturally in flow (not randomly).
+
+        ---
+
         OUTPUT REQUIREMENT:
 
         * Generate a full narrative that follows the sequence above
