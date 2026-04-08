@@ -544,18 +544,6 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
 
         ---
 
-        STRICT SLIDE FLOW (MANDATORY):
-
-        You MUST structure the narrative into the following logical sequence:
-
-        1. Problem / Context
-        2. Impact / Why it matters
-        3. Solution / Idea
-        4. Proof / Evidence / Data
-        5. Next Steps / Conclusion
-
-        ---
-
         STRUCTURE RULES:
 
         * Each section MUST naturally lead to the next
