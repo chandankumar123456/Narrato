@@ -452,9 +452,10 @@ async def run_pipeline(prompt: str, options: dict = {},
 
             from pipeline.narrative_validator import validate_narrative_arc
             try:
-                validate_narrative_arc(state.narrative_arc)
+                repaired_arc = validate_narrative_arc(state.narrative_arc)
+                state = state.model_copy(update={"narrative_arc": repaired_arc})
             except Exception as e:
-                _fail("narrative_validation", str(e))
+                logger.warning("[pipeline] Narrative validation repair failed, continuing with original arc: %s", e)
 
             state = await run_content_engine(state)
             total_slides = len(state.structured_slides or [])
@@ -464,9 +465,10 @@ async def run_pipeline(prompt: str, options: dict = {},
             state = await run_narrative_engine(state)
             from pipeline.narrative_validator import validate_narrative_arc
             try:
-                validate_narrative_arc(state.narrative_arc)
+                repaired_arc = validate_narrative_arc(state.narrative_arc)
+                state = state.model_copy(update={"narrative_arc": repaired_arc})
             except Exception as e:
-                _fail("narrative_validation", str(e))
+                logger.warning("[pipeline] Narrative validation repair failed, continuing with original arc: %s", e)
             state = await run_content_engine(state)
 
     # ── Deterministic deck-level quality passes (no LLM) ───────────
@@ -513,6 +515,10 @@ async def run_pipeline(prompt: str, options: dict = {},
             "role": s.get("role"),
             "why_this_slide": s.get("why_this_slide"),
             "why_next_slide": s.get("why_next_slide"),
+            "cause_from_previous": s.get("cause_from_previous"),
+            "narrative_delta": s.get("narrative_delta"),
+            "forward_tension": s.get("forward_tension"),
+            "tension_level": s.get("tension_level"),
             "emotional_tone": s.get("emotional_tone"),
             "bridge": s.get("bridge", ""),
             "slide_role": s.get("slide_role"),

@@ -11,6 +11,9 @@ class NarrativeEngineError(Exception):
 NARRATIVE_ROLES = [
     "Context", "Problem", "Tension", "Insight", "Solution", "Impact", "Closure"
 ]
+CAUSAL_SLIDE_ROLES = [
+    "Problem", "Consequence", "Escalation", "BreakingPoint", "Solution", "Proof", "Scale", "Ask"
+]
 
 HIGH_IMPORTANCE_SIGNALS = (
     "problem", "pain", "cost", "loss", "impact", "urgency", "consequence",
@@ -37,6 +40,11 @@ CAUSE_REPAIR_TEXT = (
 NEXT_TRIGGER_REPAIR_TEXT = (
     "This creates a new constraint that must be addressed immediately."
 )
+CAUSE_FROM_PREVIOUS_REPAIR_TEXT = CAUSE_REPAIR_TEXT
+NARRATIVE_DELTA_REPAIR_TEXT = (
+    "This slide raises the argument from description to consequence."
+)
+FORWARD_TENSION_REPAIR_TEXT = NEXT_TRIGGER_REPAIR_TEXT
 
 NARRATIVE_ENGINE_SYSTEM_PROMPT = """You are a world-class Narrative Architect specializing in high-impact presentations.
 
@@ -77,6 +85,9 @@ You must design EXACTLY {{slide_count}} slides.
 You must strictly follow this narrative progression:
 Context → Problem → Tension → Insight → Solution → Impact → Closure
 
+AND enforce this slide_role progression:
+Problem → Consequence → Escalation → BreakingPoint → Solution → Proof → Scale → Ask
+
 You may expand phases across multiple slides, but ORDER MUST NEVER BREAK.
 
 Every narrative MUST include:
@@ -101,6 +112,11 @@ OUTPUT FORMAT (STRICT JSON ONLY):
       "key_message": "...",
       "transition_reason": "...",
       "emotional_tone": "...",
+      "slide_role": "...",
+      "cause_from_previous": "...",
+      "narrative_delta": "...",
+      "forward_tension": "...",
+      "tension_level": 0,
       "cause": "...",
       "tension": "...",
       "resolution": "...",
@@ -165,6 +181,9 @@ FORBIDDEN:
 8. ROLE CONSISTENCY  
 Each slide must clearly belong to one of:
 Context, Problem, Tension, Insight, Solution, Impact, Closure
+
+AND must include one slide_role from:
+Problem, Consequence, Escalation, BreakingPoint, Solution, Proof, Scale, Ask
 
 No skipping required phases.
 
@@ -468,6 +487,31 @@ def _is_weak_next_trigger(value: object) -> bool:
     return any(phrase in text for phrase in weak)
 
 
+def _normalize_slide_role(role: object, idx: int, target_count: int) -> str:
+    role_text = _safe_text(role)
+    if role_text in CAUSAL_SLIDE_ROLES:
+        return role_text
+    if target_count <= 0:
+        return CAUSAL_SLIDE_ROLES[min(idx, len(CAUSAL_SLIDE_ROLES) - 1)]
+    mapped_idx = min(
+        idx * len(CAUSAL_SLIDE_ROLES) // max(target_count, 1),
+        len(CAUSAL_SLIDE_ROLES) - 1
+    )
+    return CAUSAL_SLIDE_ROLES[mapped_idx]
+
+
+def _default_tension_level(idx: int, target_count: int) -> int:
+    if target_count <= 1:
+        return 5
+    solution_idx = max(1, min(target_count - 1, target_count // 2))
+    if idx <= solution_idx:
+        ramp = int(round((idx / max(solution_idx, 1)) * 9))
+        return max(2, min(9, ramp))
+    tail_span = max(1, target_count - 1 - solution_idx)
+    tail = int(round(((target_count - 1 - idx) / tail_span) * 6))
+    return max(1, min(6, tail))
+
+
 def _normalize_slide_count(slides: list, target_count: int) -> list:
     normalized = list(slides or [])
     if not normalized and target_count > 0:
@@ -495,9 +539,14 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
     required_keys = {
         "intent",
         "role_in_story",
+        "slide_role",
         "key_message",
         "transition_reason",
         "emotional_tone",
+        "cause_from_previous",
+        "narrative_delta",
+        "forward_tension",
+        "tension_level",
         "cause",
         "tension",
         "resolution",
@@ -513,25 +562,57 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
         base = dict(slide)
         base.setdefault("intent", "general")
         base.setdefault("role_in_story", role_default)
+        base.setdefault("slide_role", _normalize_slide_role(base.get("slide_role"), i, target_count))
         base.setdefault("key_message", f"Core point {i + 1}")
         base.setdefault("emotional_tone", "neutral")
         base.setdefault("tension", "Pressure accumulates as unresolved constraints persist.")
         base.setdefault("resolution", "")
+        base.setdefault("cause_from_previous", base.get("cause", ""))
+        base.setdefault("narrative_delta", "")
+        base.setdefault("forward_tension", base.get("next_trigger", ""))
+        base.setdefault("tension_level", _default_tension_level(i, target_count))
 
         if i == 0:
             if not _safe_text(base.get("transition_reason")):
                 base["transition_reason"] = "This establishes the opening context for the narrative."
-            if not _safe_text(base.get("cause")):
-                base["cause"] = "This introduces the initial condition that frames the narrative."
+            if _is_weak_cause(base.get("cause_from_previous")):
+                base["cause_from_previous"] = "This introduces the baseline problem condition that anchors the story."
+            if not _safe_text(base.get("narrative_delta")):
+                base["narrative_delta"] = "The audience now sees the core problem frame."
+            if _is_weak_next_trigger(base.get("forward_tension")):
+                base["forward_tension"] = FORWARD_TENSION_REPAIR_TEXT
             if _is_weak_next_trigger(base.get("next_trigger")):
                 base["next_trigger"] = NEXT_TRIGGER_REPAIR_TEXT
         else:
             if _is_weak_transition(base.get("transition_reason")):
                 base["transition_reason"] = TRANSITION_REPAIR_TEXT
-            if _is_weak_cause(base.get("cause")):
-                base["cause"] = CAUSE_REPAIR_TEXT
+            if _is_weak_cause(base.get("cause_from_previous")):
+                base["cause_from_previous"] = CAUSE_FROM_PREVIOUS_REPAIR_TEXT
+            if not _safe_text(base.get("narrative_delta")):
+                base["narrative_delta"] = NARRATIVE_DELTA_REPAIR_TEXT
+            if _is_weak_next_trigger(base.get("forward_tension")):
+                base["forward_tension"] = FORWARD_TENSION_REPAIR_TEXT
             if _is_weak_next_trigger(base.get("next_trigger")):
                 base["next_trigger"] = NEXT_TRIGGER_REPAIR_TEXT
+
+        if _safe_text(base.get("cause")) and not _safe_text(base.get("cause_from_previous")):
+            base["cause_from_previous"] = _safe_text(base.get("cause"))
+        if _safe_text(base.get("next_trigger")) and not _safe_text(base.get("forward_tension")):
+            base["forward_tension"] = _safe_text(base.get("next_trigger"))
+        if not _safe_text(base.get("narrative_delta")):
+            base["narrative_delta"] = "The argument advances to the next mandatory narrative step."
+
+        base["role_in_story"] = _safe_text(base.get("role_in_story")) or role_default
+        base["slide_role"] = _normalize_slide_role(base.get("slide_role"), i, target_count)
+
+        try:
+            base["tension_level"] = max(0, min(10, int(base.get("tension_level"))))
+        except Exception:
+            base["tension_level"] = _default_tension_level(i, target_count)
+
+        base["cause"] = _safe_text(base.get("cause_from_previous")) or CAUSE_REPAIR_TEXT
+        base["next_trigger"] = _safe_text(base.get("forward_tension")) or NEXT_TRIGGER_REPAIR_TEXT
+        base["tension"] = _safe_text(base.get("tension")) or _safe_text(base.get("forward_tension"))
 
         # Ensure all required keys exist and are non-empty (except resolution allowed empty)
         for key in required_keys:
@@ -543,12 +624,22 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
                     base[key] = TRANSITION_REPAIR_TEXT if i > 0 else "This establishes the opening context for the narrative."
                 elif key == "cause":
                     base[key] = CAUSE_REPAIR_TEXT if i > 0 else "This introduces the initial condition that frames the narrative."
+                elif key == "cause_from_previous":
+                    base[key] = CAUSE_FROM_PREVIOUS_REPAIR_TEXT if i > 0 else "This introduces the baseline problem condition that anchors the story."
+                elif key == "narrative_delta":
+                    base[key] = NARRATIVE_DELTA_REPAIR_TEXT
+                elif key == "forward_tension":
+                    base[key] = FORWARD_TENSION_REPAIR_TEXT
+                elif key == "tension_level":
+                    base[key] = _default_tension_level(i, target_count)
                 elif key == "next_trigger":
                     base[key] = NEXT_TRIGGER_REPAIR_TEXT
                 elif key == "key_message":
                     base[key] = f"Core point {i + 1}"
                 elif key == "role_in_story":
                     base[key] = role_default
+                elif key == "slide_role":
+                    base[key] = _normalize_slide_role(base.get("slide_role"), i, target_count)
                 elif key == "intent":
                     base[key] = "general"
                 elif key == "emotional_tone":
@@ -825,8 +916,8 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
             
             # Map valid slides to the state
             for slide in valid_slides:
-                slide["why_this_slide"] = slide.get("cause", "")
-                slide["why_next_slide"] = slide.get("next_trigger", "")
+                slide["why_this_slide"] = slide.get("cause_from_previous", slide.get("cause", ""))
+                slide["why_next_slide"] = slide.get("forward_tension", slide.get("next_trigger", ""))
             from pipeline.investor_enforcer import enforce_investor_structure
 
             # 🔥 enforce investor completeness + emphasis controls
@@ -855,6 +946,11 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
             "transition_reason": "This creates need for next step" if i > 0 else "Start",
             "emotional_tone": "neutral",
             
+            "slide_role": _normalize_slide_role("", i, state.slide_count),
+            "cause_from_previous": f"This step is forced by the gap from slide {max(1, i)}",
+            "narrative_delta": f"The argument advances at step {i+1}",
+            "forward_tension": f"This creates pressure that forces step {i+2}",
+            "tension_level": _default_tension_level(i, state.slide_count),
             "cause": f"This step follows previous idea",
             "tension": f"Increasing importance of step {i+1}",
             "resolution": "",

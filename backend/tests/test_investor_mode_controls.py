@@ -103,6 +103,10 @@ def test_validate_narrative_arc_repairs_weak_fields_without_failure():
     assert repaired[1]["transition_reason"] == TRANSITION_REPAIR_TEXT
     assert repaired[1]["cause"] == CAUSE_REPAIR_TEXT
     assert repaired[1]["next_trigger"] == NEXT_TRIGGER_REPAIR_TEXT
+    assert repaired[1]["cause_from_previous"] == CAUSE_REPAIR_TEXT
+    assert repaired[1]["forward_tension"] == NEXT_TRIGGER_REPAIR_TEXT
+    assert repaired[1]["narrative_delta"]
+    assert isinstance(repaired[1]["tension_level"], int)
 
 
 def test_validate_narrative_arc_fills_required_keys_softly():
@@ -111,9 +115,14 @@ def test_validate_narrative_arc_fills_required_keys_softly():
     for key in {
         "intent",
         "role_in_story",
+        "slide_role",
         "key_message",
         "transition_reason",
         "emotional_tone",
+        "cause_from_previous",
+        "narrative_delta",
+        "forward_tension",
+        "tension_level",
         "cause",
         "tension",
         "resolution",
