@@ -12,6 +12,17 @@ NARRATIVE_ROLES = [
     "Context", "Problem", "Tension", "Insight", "Solution", "Impact", "Closure"
 ]
 
+HIGH_IMPORTANCE_SIGNALS = (
+    "problem", "pain", "cost", "loss", "impact", "urgency", "consequence",
+    "solution", "differentiation", "unique", "defensible", "advantage",
+    "traction", "proof", "metric", "growth", "adoption",
+    "revenue", "pricing", "arr", "business model", "monetization",
+    "why now", "timing", "window", "regulation", "shift",
+)
+LOW_IMPORTANCE_SIGNALS = (
+    "overview", "definition", "intro", "introduction", "background", "basics", "generic",
+)
+
 NARRATIVE_ENGINE_SYSTEM_PROMPT = """You are a world-class Narrative Architect specializing in high-impact presentations.
 
 🔥 BUSINESS PRIORITY OVERRIDE (CRITICAL):
@@ -456,6 +467,69 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
     return slides
 
 
+def _score_slide_importance(slide: dict) -> str:
+    text = " ".join(
+        [
+            str(slide.get("intent", "")),
+            str(slide.get("role_in_story", "")),
+            str(slide.get("key_message", "")),
+            str(slide.get("transition_reason", "")),
+        ]
+    ).lower()
+    if any(token in text for token in HIGH_IMPORTANCE_SIGNALS):
+        return "high"
+    if any(token in text for token in LOW_IMPORTANCE_SIGNALS):
+        return "low"
+    return "low"
+
+
+def _has_high_impact_slide(slides: list[dict]) -> bool:
+    for slide in slides:
+        text = " ".join(
+            [
+                str(slide.get("role_in_story", "")),
+                str(slide.get("key_message", "")),
+                str(slide.get("intent", "")),
+            ]
+        ).lower()
+        if "why now" in text or "why this wins" in text:
+            return True
+    return False
+
+
+def _inject_high_impact_slide(slides: list[dict]) -> list[dict]:
+    if not slides:
+        return slides
+
+    target_idx = len(slides) - 1
+    for idx, slide in enumerate(slides):
+        role = str(slide.get("role_in_story", "")).lower()
+        if "funding ask" in role or "closure" in role or "impact" in role:
+            target_idx = idx
+
+    high_impact = {
+        "intent": "why_now",
+        "role_in_story": "Why now",
+        "key_message": "Why this wins now: delay forfeits market leadership",
+        "transition_reason": "Market conditions and buyer behavior now favor decisive adoption",
+        "emotional_tone": "assertive",
+        "cause": "Incumbent workflows are failing while demand and urgency are compounding",
+        "tension": "Every delayed quarter increases switching costs and cedes strategic ground",
+        "resolution": "Adopt now to capture category advantage before the window narrows",
+        "next_trigger": "Immediate execution converts urgency into measurable market control",
+        "importance": "high",
+    }
+    slides[target_idx] = {**slides[target_idx], **high_impact}
+    return slides
+
+
+def _apply_investor_importance_weighting(slides: list[dict]) -> list[dict]:
+    weighted: list[dict] = []
+    for slide in slides:
+        weighted.append({**slide, "importance": _score_slide_importance(slide)})
+    return weighted
+
+
 async def run_narrative_engine(state: PresentationState, business_context: dict = None) -> PresentationState:
     """Generate the presentation's narrative arc mapping out slide intents."""
     logger.info(f"[narrative_engine] Building story arc for {state.slide_count} slides...")
@@ -660,8 +734,12 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
                 slide["why_next_slide"] = slide.get("next_trigger", "")
             from pipeline.investor_enforcer import enforce_investor_structure
 
-            # 🔥 enforce investor completeness
-            valid_slides = enforce_investor_structure(valid_slides)
+            # 🔥 enforce investor completeness + emphasis controls
+            if state.presentation_mode == "investor":
+                valid_slides = enforce_investor_structure(valid_slides)
+                valid_slides = _apply_investor_importance_weighting(valid_slides)
+                if not _has_high_impact_slide(valid_slides):
+                    valid_slides = _inject_high_impact_slide(valid_slides)
 
             return state.model_copy(update={"narrative_arc": valid_slides})
             
