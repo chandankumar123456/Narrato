@@ -35,7 +35,8 @@ export default function SlideCanvas({
   useEffect(() => {
     const el = sectionRefs.current[slideIndex];
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest" });
     }
   }, [slideIndex]);
 

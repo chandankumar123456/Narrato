@@ -19,7 +19,7 @@
   --s-8: 64px;
 
   --max-text: 80ch;
-  --max-body: 72ch;
+  --max-body-width: 72ch;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -71,6 +71,18 @@ html, body {
   max-width: 100%;
 }
 
+.slide-frame {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.slide-frame .primary,
+.slide-frame .supporting {
+  margin: 0;
+}
+
 .slide :is(h1, h2, h3, h4, h5, h6) {
   margin: 0;
   color: var(--text-primary);
@@ -93,7 +105,7 @@ html, body {
 }
 
 .slide :is(p, li) {
-  max-width: var(--max-body);
+  max-width: var(--max-body-width);
 }
 
 .slide :is(small, .slide-kicker, .eyebrow, [class*="kicker"], [class*="eyebrow"], [class*="label"], [class*="meta"]) {

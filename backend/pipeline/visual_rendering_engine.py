@@ -128,7 +128,7 @@ async def render_slides_to_images(
             """)
             
             png_path = os.path.join(output_dir, f"slide_{idx + 1}.png")
-            await page.screenshot(path=png_path, full_page=True)
+            await page.screenshot(path=png_path, full_page=False)
             image_paths.append(png_path)
             await page.close()
 
