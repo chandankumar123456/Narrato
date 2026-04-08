@@ -1,15 +1,15 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Outfit:wght@700;800&family=Space+Grotesk:wght@700&display=swap");
-
-/* Layered Neutral Card System — global, deterministic, CSS-only */
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Outfit:wght@600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
 
 :root {
   --bg-base: #FAFAFA;
   --surface-primary: #FFFFFF;
   --surface-elevated: #F4F6F8;
+  --surface-muted: #F8FAFC;
   --border: #E2E8F0;
 
   --text-primary: #0F172A;
   --text-secondary: #64748B;
+  --text-muted: #94A3B8;
   --accent: #2563EB;
 
   --radius: 8px;
@@ -20,33 +20,40 @@
   --s-6: 48px;
   --s-8: 64px;
 
-  --max-text: 80ch;
+  --max-heading-width: 18ch;
   --max-body-width: 72ch;
 }
 
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 @page {
   size: 1920px 1080px;
   margin: 0;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   min-height: 100%;
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: "DM Sans", "Inter", "Segoe UI", sans-serif;
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .deck-surface {
   width: 100%;
-  max-width: 1360px;
+  max-width: 1320px;
   margin: 0 auto;
-  padding: var(--s-4) var(--s-3) var(--s-8);
+  padding: var(--s-6) var(--s-3) var(--s-8);
   display: flex;
   flex-direction: column;
   gap: var(--s-6);
@@ -54,7 +61,6 @@ html, body {
 }
 
 .slide-section {
-  display: block;
   width: 100%;
 }
 
@@ -78,6 +84,10 @@ html, body {
   max-width: 100%;
 }
 
+.slide > * + * {
+  margin-top: 0;
+}
+
 .slide-frame {
   width: 100%;
   display: flex;
@@ -92,77 +102,86 @@ html, body {
 
 .slide :is(h1, h2, h3, h4, h5, h6) {
   margin: 0;
-  color: var(--text-primary);
   font-family: "Outfit", "DM Sans", sans-serif;
+  color: var(--text-primary);
   font-weight: 700;
   letter-spacing: -0.02em;
-  max-width: var(--max-text);
+  line-height: 1.12;
+  max-width: var(--max-heading-width);
 }
 
-.slide h1 { font-size: 56px; line-height: 1.1; }
-.slide h2 { font-size: 48px; line-height: 1.15; }
-.slide h3 { font-size: 40px; line-height: 1.2; }
-.slide h4 { font-size: 32px; line-height: 1.25; }
-.slide h5, .slide h6 { font-size: 24px; line-height: 1.3; }
+.slide h1 { font-size: 64px; }
+.slide h2 { font-size: 48px; }
+.slide h3 { font-size: 36px; }
+.slide h4 { font-size: 28px; }
+.slide h5,
+.slide h6 { font-size: 22px; }
 
-.slide :is(p, li, td, th, div, span) {
+.slide :is(p, li, td, th, span, div) {
   color: var(--text-primary);
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
-.slide :is(p, li) {
+.slide :is(p, li, blockquote) {
   max-width: var(--max-body-width);
 }
 
-.slide :is(small, .slide-kicker, .eyebrow, [class*="kicker"], [class*="eyebrow"], [class*="label"], [class*="meta"]) {
+.slide :is(small, .slide-kicker, .eyebrow, [class*="kicker"], [class*="eyebrow"], [class*="label"], [class*="meta"], [class*="caption"]) {
   color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
   line-height: 1.5;
-  letter-spacing: 0;
-  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.slide :is(strong, b, [class*="metric"], [class*="stat-value"], [class*="stat"], [class*="value"]) {
+.slide :is(strong, b, [class*="metric"], [class*="stat-value"], [class*="stat"], [class*="value"], [class*="kpi"]) {
   font-family: "Space Grotesk", "Outfit", sans-serif;
-  font-size: 40px;
-  line-height: 1.2;
   font-weight: 700;
+  font-size: 40px;
+  line-height: 1.15;
   color: var(--text-primary);
 }
 
-.slide :is([class*="metric"], [class*="stat"], [class*="value"]) {
-  margin-top: var(--s-2);
-  margin-bottom: var(--s-2);
-}
-
-.slide :is([class*="metric-highlight"], [class*="key-metric"], [class*="cta"], button, a[href]) {
+.slide :is([class*="metric-highlight"], [class*="key-metric"], [class*="metric"]:is(strong, b), [class*="kpi"], [class*="cta"], button, a[href]) {
   color: var(--accent);
 }
 
 .slide :is(button, [class*="cta"], a[href]) {
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--surface-primary);
   padding: var(--s-2) var(--s-3);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--s-1);
-  background: var(--surface-primary);
-  text-decoration: none;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.2;
+  text-decoration: none;
 }
 
-.slide :is(ul, ol, table, blockquote, pre, [class*="card"], [class*="group"], [class*="panel"], [class*="item"], [class*="support"], [class*="stat"], [class*="metric"]) {
+/* Generic grouping/card behavior */
+.slide :is(ul, ol, table, blockquote, pre, [class*="card"], [class*="group"], [class*="panel"], [class*="item"], [class*="block"], [class*="support"], [class*="stat"], [class*="metric"], [class*="row"], [class*="cell"], [class*="tile"]) {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-primary);
   padding: var(--s-2);
 }
 
-.slide-section:nth-child(even) .slide :is(ul, ol, table, blockquote, pre, [class*="card"], [class*="group"], [class*="panel"], [class*="item"], [class*="support"], [class*="stat"], [class*="metric"]) {
-  background: var(--surface-elevated);
+.slide-section:nth-child(even) .slide :is(ul, ol, table, blockquote, pre, [class*="card"], [class*="group"], [class*="panel"], [class*="item"], [class*="block"], [class*="support"], [class*="stat"], [class*="metric"], [class*="row"], [class*="cell"], [class*="tile"]) {
+  background: var(--surface-muted);
+}
+
+/* Repeated sibling groups automatically become neat rows/cards */
+.slide > :is(div, section, article, ul, ol):has(+ :is(div, section, article, ul, ol)),
+.slide > :is(div, section, article, ul, ol) + :is(div, section, article, ul, ol) {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-primary);
+  padding: var(--s-2);
 }
 
 .slide :is(ul, ol) {
@@ -190,6 +209,14 @@ html, body {
   border-bottom: 1px solid var(--border);
 }
 
+.slide th {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .slide tr:last-child td {
   border-bottom: 0;
 }
@@ -197,7 +224,7 @@ html, body {
 .slide hr {
   border: 0;
   border-top: 1px solid var(--border);
-  margin: var(--s-3) 0;
+  margin: var(--s-4) 0;
 }
 
 .slide :is(img, svg, canvas, video) {
@@ -206,17 +233,30 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   display: block;
+  background: var(--surface-elevated);
 }
 
-.slide > * + * {
-  margin-top: 0;
+/* Comfortable narrative rhythm */
+.slide > :is(header, section, article, div):not(:first-child) {
+  margin-top: var(--s-1);
 }
 
 @media (max-width: 1024px) {
-  .deck-surface { padding: var(--s-3) var(--s-2) var(--s-6); gap: var(--s-4); }
-  .slide { padding: var(--s-3); gap: var(--s-2); }
+  .deck-surface {
+    padding: var(--s-3) var(--s-2) var(--s-6);
+    gap: var(--s-4);
+  }
+
+  .slide {
+    padding: var(--s-3);
+    gap: var(--s-2);
+  }
+
   .slide h1 { font-size: 48px; }
   .slide h2 { font-size: 40px; }
   .slide h3 { font-size: 32px; }
-  .slide :is(strong, b, [class*="metric"], [class*="stat-value"], [class*="stat"], [class*="value"]) { font-size: 40px; }
+
+  .slide :is(strong, b, [class*="metric"], [class*="stat-value"], [class*="stat"], [class*="value"], [class*="kpi"]) {
+    font-size: 32px;
+  }
 }
