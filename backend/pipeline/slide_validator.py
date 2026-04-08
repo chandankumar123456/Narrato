@@ -63,8 +63,14 @@ def validate_slide_content(slides: list[dict]) -> list[dict]:
         primary_element = str(slide.get("primary_element", "")).strip()
         supporting_elements = slide.get("supporting_elements", [])
 
+        # 🔥 FIX 3 — merge fragmented tokens (like ["0", "1Million", "s"])
+        if isinstance(supporting_elements, list) and len(supporting_elements) > 0:
+            merged = " ".join(str(x) for x in supporting_elements).strip()
+            if len(merged.split()) > len(supporting_elements):
+                supporting_elements = [merged]
+
         # 🔥 CHECK 1: primary must exist
-        if not primary_element:
+        if not primary_element or len(primary_element.split()) < 2:
             violations.append(
                 f"Slide {slide_id} ({slide_type}): missing primary_element"
             )
@@ -73,17 +79,31 @@ def validate_slide_content(slides: list[dict]) -> list[dict]:
 
         # 🔥 CHECK 2: supporting elements (except title slides)
         if not is_hero_or_title:
-            if not isinstance(supporting_elements, list) or len(supporting_elements) == 0:
-                violations.append(
+            if not isinstance(supporting_elements, list):                violations.append(
                     f"Slide {slide_id} ({slide_type}): missing supporting_elements"
                 )
             else:
                 for idx, sup in enumerate(supporting_elements):
-                    if len(str(sup).split()) <= 2:
-                        violations.append(
-                            f"Slide {slide_id} ({slide_type}): supporting_elements[{idx}] too short: '{sup}'"
-                        )
+                    sup_text = str(sup).strip()
 
+                    # allow numbers, short labels, stats (e.g., "50M", "ARR", "0", "01")
+                    if not sup_text:
+                        violations.append(
+                            f"Slide {slide_id} ({slide_type}): supporting_elements[{idx}] is empty"
+                        )
+                        continue
+
+                    word_count = len(sup_text.split())
+
+                    # reject only if truly meaningless (very short AND not numeric/stat-like)
+                    is_numeric_like = sup_text.replace(".", "").replace(",", "").isdigit()
+                    is_short_label = len(sup_text) <= 3
+
+                    if word_count <= 2 and not is_numeric_like and not is_short_label:
+                        violations.append(
+                            f"Slide {slide_id} ({slide_type}): supporting_elements[{idx}] too weak: '{sup_text}'"
+                        )
+                        
     if violations:
         for v in violations:
             logger.error("[slide_validator] VIOLATION: %s", v)

@@ -19,6 +19,15 @@ On failure:  returns structured fix directives so the caller can
 import logging
 from services.llm_client import call_llm_json
 
+def _fuzzy_match(text: str, html: str, threshold: float = 0.6) -> bool:
+    words = [w.lower() for w in text.split() if len(w) > 3]
+    if not words:
+        return True
+
+    html_lower = html.lower()
+    matches = sum(1 for w in words if w in html_lower)
+    return (matches / len(words)) >= threshold
+
 logger = logging.getLogger(__name__)
 
 
@@ -198,9 +207,8 @@ def _deterministic_render_check(
 
     # Check title
     title = preprocessing_result.get("title", "").strip()
-    if title and title not in html_content:
-        # Fuzzy: check if at least the first 20 chars appear
-        if title[:20] not in html_content:
+    if title:
+        if not _fuzzy_match(title, html_content):
             missing.append(f"TITLE: {title}")
 
     # Check primary element
@@ -223,11 +231,9 @@ def _deterministic_render_check(
     for sup in preprocessing_result.get("supporting_elements", []):
         sup_text = str(sup).strip()
         
-        # allow partial / fuzzy match
         if sup_text:
-            if sup_text not in html_content:
-                if len(sup_text) > 30 and sup_text[:30] not in html_content:
-                    missing.append(sup_text)
+            if not _fuzzy_match(sup_text, html_content):
+                missing.append(sup_text)
 
     # If only 1 element missing and it's very long → allow pass
     if len(missing) == 1:
