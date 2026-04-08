@@ -1,47 +1,52 @@
 from pipeline.narrative_validator import validate_narrative_arc
 
 
-def test_validate_narrative_arc_repairs_required_causal_fields():
+def test_validate_narrative_arc_marks_weak_causal_fields_invalid():
     arc = [
         {
-            "role_in_story": "Problem",
-            "key_message": "Teams lose deals from slow follow-up",
+            "slide_role": "Problem",
+            "key_message": "Manual follow-up causes delayed revenue realization",
             "transition_reason": "next step",
-            "cause": "",
-            "next_trigger": "next step",
-        },
-        {
-            "role_in_story": "Solution",
-            "key_message": "Automated outreach closes the speed gap",
-            "transition_reason": "logical continuation",
             "cause_from_previous": "",
             "narrative_delta": "",
-            "forward_tension": "",
-            "tension_level": "bad",
+            "forward_tension": "this creates need for action",
+        },
+        {
+            "slide_role": "Solution",
+            "key_message": "Automated playbooks close follow-up gaps quickly",
+            "transition_reason": "logical continuation",
+            "cause_from_previous": "follows logically from previous slide",
+            "narrative_delta": "better outcomes",
+            "forward_tension": "next step",
         },
     ]
 
-    repaired = validate_narrative_arc(arc)
-    assert len(repaired) == 2
-    for slide in repaired:
-        assert slide.get("cause_from_previous")
-        assert slide.get("narrative_delta")
-        assert slide.get("forward_tension")
-        assert isinstance(slide.get("tension_level"), int)
-        assert 0 <= slide.get("tension_level") <= 10
-        assert slide.get("slide_role")
+    result = validate_narrative_arc(arc)
+    assert result["invalid_slide_indices"] == [0, 1]
+    assert any("weak or missing cause_from_previous" in v for v in result["violations"])
+    assert any("weak or missing transition_reason" in v for v in result["violations"])
 
 
-def test_validate_narrative_arc_enforces_tension_curve():
+def test_validate_narrative_arc_requires_previous_key_message_reference():
     arc = [
-        {"slide_role": "Problem", "key_message": "P", "cause_from_previous": "x x x x x", "narrative_delta": "d", "forward_tension": "f f f f f", "transition_reason": "t t t t t", "tension_level": 1},
-        {"slide_role": "Escalation", "key_message": "E", "cause_from_previous": "x x x x x", "narrative_delta": "d", "forward_tension": "f f f f f", "transition_reason": "t t t t t", "tension_level": 1},
-        {"slide_role": "Solution", "key_message": "S", "cause_from_previous": "x x x x x", "narrative_delta": "d", "forward_tension": "f f f f f", "transition_reason": "t t t t t", "tension_level": 1},
-        {"slide_role": "Proof", "key_message": "Pr", "cause_from_previous": "x x x x x", "narrative_delta": "d", "forward_tension": "f f f f f", "transition_reason": "t t t t t", "tension_level": 10},
+        {
+            "slide_role": "Problem",
+            "key_message": "Onboarding delays increase customer churn",
+            "transition_reason": "Delays expose compounding churn risk each month",
+            "cause_from_previous": "Initial conditions reveal accelerating onboarding failures",
+            "narrative_delta": "The problem shifts from inefficiency to retention damage",
+            "forward_tension": "Retention losses force an intervention decision now",
+        },
+        {
+            "slide_role": "Consequence",
+            "key_message": "Revenue volatility blocks predictable planning",
+            "transition_reason": "Churn volatility makes growth forecasts unreliable for investors",
+            "cause_from_previous": "Market seasonality creates uncertainty in planning assumptions",
+            "narrative_delta": "The narrative moves from churn to forecast instability",
+            "forward_tension": "Planning instability forces a structural response",
+        },
     ]
 
-    repaired = validate_narrative_arc(arc)
-    assert repaired[0]["narrative_delta"] != "d"
-    assert repaired[1]["tension_level"] >= repaired[0]["tension_level"]
-    assert repaired[2]["tension_level"] >= repaired[1]["tension_level"]
-    assert repaired[3]["tension_level"] <= repaired[2]["tension_level"]
+    result = validate_narrative_arc(arc)
+    assert result["invalid_slide_indices"] == [1]
+    assert any("does not reference previous key_message" in v for v in result["violations"])

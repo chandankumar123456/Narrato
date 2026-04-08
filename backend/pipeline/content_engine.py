@@ -59,14 +59,14 @@ async def run_content_engine(state: PresentationState) -> PresentationState:
     "role_in_story": slide.get("section", "Context"),
     "slide_role": causal_roles[min(i, len(causal_roles) - 1)],
     "key_message": slide.get("purpose", ""),
-    "cause_from_previous": f"Follows logically from previous slide intent",
-    "narrative_delta": "Introduces the next required narrative change",
-    "forward_tension": "Creates unresolved pressure for the next slide",
+    "cause_from_previous": "",
+    "narrative_delta": "",
+    "forward_tension": "",
     "tension_level": 5,
-    "cause": f"Follows logically from previous slide intent",
-    "tension": f"Expands the narrative progression",
+    "cause": "",
+    "tension": "",
     "resolution": "",
-    "next_trigger": "Leads to next structured step",
+    "next_trigger": "",
     "emotional_tone": "neutral"
 })
 
@@ -135,11 +135,11 @@ Return structured_slides with same length.
             slide["emotional_tone"] = emotional_tone
             slide["type"] = "content_slide"
             slide["slide_id"] = i + 1
-            slide["why_this_slide"] = arc_slide.get("cause_from_previous", arc_slide.get("cause", ""))
-            slide["why_next_slide"] = arc_slide.get("forward_tension", arc_slide.get("next_trigger", ""))
-            slide["cause_from_previous"] = arc_slide.get("cause_from_previous", arc_slide.get("cause", ""))
+            slide["why_this_slide"] = arc_slide.get("cause_from_previous", "")
+            slide["why_next_slide"] = arc_slide.get("forward_tension", "")
+            slide["cause_from_previous"] = arc_slide.get("cause_from_previous", "")
             slide["narrative_delta"] = arc_slide.get("narrative_delta", "")
-            slide["forward_tension"] = arc_slide.get("forward_tension", arc_slide.get("next_trigger", ""))
+            slide["forward_tension"] = arc_slide.get("forward_tension", "")
             slide["tension_level"] = arc_slide.get("tension_level", 0)
             slide["tension"] = arc_slide.get("tension", "")
             slide["resolution"] = arc_slide.get("resolution", "")

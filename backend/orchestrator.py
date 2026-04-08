@@ -16,7 +16,7 @@ from pipeline.prompt_understanding import parse_prompt
 from pipeline.schema_parser import parse_user_schema
 from pipeline.state_builder import build_state
 from pipeline.state_completion import complete_state
-from pipeline.narrative_engine import run_narrative_engine
+from pipeline.narrative_engine import run_narrative_engine, regenerate_invalid_narrative_slides
 from pipeline.content_engine import run_content_engine
 from pipeline.strict_slide_planner import plan_slides_strict
 from pipeline.strict_content_structurer import generate_strict_content
@@ -452,10 +452,32 @@ async def run_pipeline(prompt: str, options: dict = {},
 
             from pipeline.narrative_validator import validate_narrative_arc
             try:
-                repaired_arc = validate_narrative_arc(state.narrative_arc)
-                state = state.model_copy(update={"narrative_arc": repaired_arc})
+                validation = validate_narrative_arc(state.narrative_arc)
+                invalid_indices = validation.get("invalid_slide_indices", [])
+                if invalid_indices:
+                    logger.warning(
+                        "[pipeline] Regenerating invalid narrative slides once: %s",
+                        ",".join(str(i + 1) for i in invalid_indices),
+                    )
+                    regenerated_arc = await regenerate_invalid_narrative_slides(
+                        state=state,
+                        narrative_arc=validation.get("slides", []),
+                        invalid_indices=invalid_indices,
+                        business_context=state.business_context,
+                    )
+                    second_validation = validate_narrative_arc(regenerated_arc)
+                    if second_validation.get("invalid_slide_indices"):
+                        logger.warning(
+                            "[pipeline] Narrative invalid slides remain after regeneration: %s",
+                            "; ".join(second_validation.get("violations", [])),
+                        )
+                        state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
+                    else:
+                        state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
+                else:
+                    state = state.model_copy(update={"narrative_arc": validation.get("slides", [])})
             except Exception as e:
-                logger.warning("[pipeline] Narrative validation repair failed, continuing with original arc: %s", e)
+                logger.warning("[pipeline] Narrative validation/regeneration failed, continuing with original arc: %s", e)
 
             state = await run_content_engine(state)
             total_slides = len(state.structured_slides or [])
@@ -465,10 +487,31 @@ async def run_pipeline(prompt: str, options: dict = {},
             state = await run_narrative_engine(state)
             from pipeline.narrative_validator import validate_narrative_arc
             try:
-                repaired_arc = validate_narrative_arc(state.narrative_arc)
-                state = state.model_copy(update={"narrative_arc": repaired_arc})
+                validation = validate_narrative_arc(state.narrative_arc)
+                invalid_indices = validation.get("invalid_slide_indices", [])
+                if invalid_indices:
+                    logger.warning(
+                        "[pipeline] Regenerating invalid narrative slides once: %s",
+                        ",".join(str(i + 1) for i in invalid_indices),
+                    )
+                    regenerated_arc = await regenerate_invalid_narrative_slides(
+                        state=state,
+                        narrative_arc=validation.get("slides", []),
+                        invalid_indices=invalid_indices,
+                    )
+                    second_validation = validate_narrative_arc(regenerated_arc)
+                    if second_validation.get("invalid_slide_indices"):
+                        logger.warning(
+                            "[pipeline] Narrative invalid slides remain after regeneration: %s",
+                            "; ".join(second_validation.get("violations", [])),
+                        )
+                        state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
+                    else:
+                        state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
+                else:
+                    state = state.model_copy(update={"narrative_arc": validation.get("slides", [])})
             except Exception as e:
-                logger.warning("[pipeline] Narrative validation repair failed, continuing with original arc: %s", e)
+                logger.warning("[pipeline] Narrative validation/regeneration failed, continuing with original arc: %s", e)
             state = await run_content_engine(state)
 
     # ── Deterministic deck-level quality passes (no LLM) ───────────
