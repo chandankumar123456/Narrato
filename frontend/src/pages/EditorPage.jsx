@@ -78,10 +78,10 @@ export default function EditorPage() {
 
         {/* Center — Slide Canvas */}
         <SlideCanvas
-          slide={activeSlideData}
+          slides={editor.slides}
           slideIndex={editor.activeSlide}
           totalSlides={editor.slides.length}
-          isLoading={activeSlideData != null && editor.slideLoading === activeSlideData.slide_id}
+          slideLoadingId={editor.slideLoading}
           onNavigate={editor.setActiveSlide}
           onRegenerate={() => {
             if (activeSlideData) {

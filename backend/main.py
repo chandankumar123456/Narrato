@@ -424,8 +424,8 @@ class RegenerateSlideRequest(BaseModel):
 
 
 class RestyleRequest(BaseModel):
-    theme: str = "dark_modern"  # dark_modern, minimal_light, bold_gradient
-    density: str = "balanced"  # visual, minimal, data_heavy
+    theme: str = "layered_neutral_card_system"
+    density: str = "locked"
 
 
 class UpdateSlideRequest(BaseModel):
@@ -571,9 +571,10 @@ async def restyle_slides(job_id: str, req: RestyleRequest):
     try:
         from pipeline.dynamic_composition_engine import run_dynamic_composition_engine
 
+        locked_render_system = "layered_neutral_card_system"
         designs, html_slides = await run_dynamic_composition_engine(
             structured_slides,
-            state_theme=req.theme
+            state_theme=locked_render_system
         )
 
         # Save restyled HTML slides
@@ -592,7 +593,7 @@ async def restyle_slides(job_id: str, req: RestyleRequest):
 
         return {
             "job_id": job_id,
-            "theme": req.theme,
+            "theme": locked_render_system,
             "slides": [
                 {"slide_id": idx + 1, "html_url": path, "html": html}
                 for idx, (path, html) in enumerate(zip(html_slide_paths, html_slides))

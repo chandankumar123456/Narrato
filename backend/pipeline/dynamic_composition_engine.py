@@ -2,12 +2,23 @@ import logging
 import asyncio
 from pathlib import Path
 import html
+import os
 from services.llm_client import call_llm_json
 from pipeline.visual_narrative_control import compute_visual_plan, format_visual_plan_for_renderer
 from pipeline.narrative_transform import transform_narrative
 from pipeline.content_integrity import verify_narrative_to_preprocess, verify_preprocess_to_render
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_RENDER_SYSTEM = "layered_neutral_card_system"
+
+
+def _active_render_system() -> str:
+    return os.getenv("NARRATO_RENDER_SYSTEM", DEFAULT_RENDER_SYSTEM).strip().lower()
+
+
+def _is_layered_neutral_mode() -> bool:
+    return _active_render_system() != "legacy_custom_css"
 
 def _load_slides_css() -> str:
     css_path = Path(__file__).resolve().parent / "static" / "slides.css"
@@ -20,17 +31,20 @@ _HTML_WRAPPER = """\
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=1920,height=1080"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Slide</title>
 <style>
 {slides_css}
 </style>
-{custom_style}
 </head>
 <body>
-<div class="slide" data-theme="{theme}">
-{inner_html}
-</div>
+<main class="deck-surface" data-render-system="{render_system}">
+  <section class="slide-section">
+    <div class="slide" data-render-system="{render_system}">
+    {inner_html}
+    </div>
+  </section>
+</main>
 </body>
 </html>"""
 
@@ -85,7 +99,7 @@ CRITICAL: A VISUAL PLAN is provided with each slide. You MUST follow it EXACTLY:
 
 DESIGN RULES (MANDATORY):
 1. ONE DOMINANT ELEMENT: The primary_element MUST visually dominate the slide. It must be clearly the first thing seen. It must not be fragmented or broken. It must remain readable as a full sentence.
-2. ALL SUPPORTING ELEMENTS VISIBLE: Ensure every item in `supporting_elements` is represented in the HTML. You may slightly rephrase for better visual clarity, but do NOT omit any idea or add unrelated content.
+2. ALL SUPPORTING ELEMENTS VISIBLE: Ensure every item in `supporting_elements` is represented in the HTML verbatim. Do NOT rephrase, reorder, omit, summarize, or add unrelated content.
 3. LAYOUT FROM VISUAL PLAN: Follow the layout directive from the VISUAL PLAN section. Do NOT default to centered vertical stacking unless the plan says center_focus.
 4. WHITESPACE ENFORCEMENT: Maintain 40-60% empty space across the layout. Do not make the slide dense.
 5. DESIGN CONSISTENCY: Enforce spacing, typography, and color palette from the theme exactly. Use relative sizing (rem, em) or percentages (%), not random fixed pixel sets.
@@ -135,7 +149,7 @@ Context constraints: No images. Only vanilla CSS/HTML.
 
 Return a JSON object with:
 - "html": The body content of the layout. (Do not wrap in <html> or <body>).
-- "css": Any custom CSS you want placed in a <style> block specific to this layout. Use classes.
+- "css": Always return an empty string.
 
 IMPORTANT: Only return JSON. No markdown backticks or preamble.
 """
@@ -194,36 +208,42 @@ async def generate_slide_html(slide_data: dict, slide_index: int, total_slides: 
     # role_in_story = slide_data.get("role_in_story", "")
     role_in_story = slide_data.get("role", "")
     
-    # ── Phase 0: Narrative Transformation (understand → interpret → express) ──
-    # Runs BEFORE preprocessing to convert shallow content into story-driven text.
-    # This is the "thinking layer" that was missing.
-    narrative_result = await transform_narrative(
-        raw_content=content,
-        slide_index=slide_index,
-        total_slides=total_slides,
-        topic=topic,
-        narrative_role=role_in_story,
-        emotional_tone=emotional_tone,
-        previous_slide=previous_slide_summary,   # 🔥 NEW
-    )
-    
-    narrative_text = narrative_result.get("narrative_text", "")
-    narrative_entities = narrative_result.get("key_entities", [])
-    narrative_angle = narrative_result.get("narrative_angle", "")
-    
-    # Enrich the content with the narrative transformation output.
-    # The preprocessor will now receive deeper, story-driven text instead of raw data.
-    if narrative_text and narrative_angle != "passthrough":
-        # Inject the narrative text into the content so the preprocessor structures it
-        enriched_content = dict(content) if isinstance(content, dict) else {"raw": str(content)}
-        enriched_content["_narrative_text"] = narrative_text
-        enriched_content["_narrative_angle"] = narrative_angle
-        logger.info(
-            "Slide %d: Narrative enrichment applied — angle='%s'",
-            slide_index + 1, narrative_angle,
-        )
-    else:
+    if _is_layered_neutral_mode():
+        narrative_text = ""
+        narrative_entities = []
+        narrative_angle = "passthrough"
         enriched_content = content
+    else:
+        # ── Phase 0: Narrative Transformation (understand → interpret → express) ──
+        # Runs BEFORE preprocessing to convert shallow content into story-driven text.
+        # This is the "thinking layer" that was missing.
+        narrative_result = await transform_narrative(
+            raw_content=content,
+            slide_index=slide_index,
+            total_slides=total_slides,
+            topic=topic,
+            narrative_role=role_in_story,
+            emotional_tone=emotional_tone,
+            previous_slide=previous_slide_summary,   # 🔥 NEW
+        )
+        
+        narrative_text = narrative_result.get("narrative_text", "")
+        narrative_entities = narrative_result.get("key_entities", [])
+        narrative_angle = narrative_result.get("narrative_angle", "")
+        
+        # Enrich the content with the narrative transformation output.
+        # The preprocessor will now receive deeper, story-driven text instead of raw data.
+        if narrative_text and narrative_angle != "passthrough":
+            # Inject the narrative text into the content so the preprocessor structures it
+            enriched_content = dict(content) if isinstance(content, dict) else {"raw": str(content)}
+            enriched_content["_narrative_text"] = narrative_text
+            enriched_content["_narrative_angle"] = narrative_angle
+            logger.info(
+                "Slide %d: Narrative enrichment applied — angle='%s'",
+                slide_index + 1, narrative_angle,
+            )
+        else:
+            enriched_content = content
     
     # Feed narrative entities into continuity context early
     if isinstance(narrative_entities, list) and narrative_entities:
@@ -272,57 +292,67 @@ Content:
 
     # Phase 1: Preprocessing & Content Reduction
     preprocessing_result = {}
-    preprocess_feedback = ""
-    for attempt in range(max_retries := 3):
-        prompt = base_prompt
-        if preprocess_feedback:
-            prompt += f"\n\nPREVIOUS ATTEMPT FAILED. FIX:\n{preprocess_feedback}"
-            
-        try:
-            preprocessing_result = await call_llm_json(PREPROCESS_PROMPT, prompt)
-            
-            # Extract and validate
-            title = preprocessing_result.get("title", "").strip()
-            primary = preprocessing_result.get("primary_element", "").strip()
-            sups = preprocessing_result.get("supporting_elements", [])
-            
-            if not title and primary:
-                title = primary
-                preprocessing_result["title"] = title
-            if not primary and title:
-                primary = title
-                preprocessing_result["primary_element"] = primary
+    if _is_layered_neutral_mode():
+        immutable_title = (primary or slide_data.get("title") or f"Slide {slide_index + 1}").strip()
+        immutable_support = points if isinstance(points, list) else []
+        preprocessing_result = {
+            "intent": intent_str or "content",
+            "title": immutable_title,
+            "primary_element": immutable_title,
+            "supporting_elements": [str(x) for x in immutable_support],
+            "entities": slide_data.get("entities", []) or [],
+        }
+    else:
+        preprocess_feedback = ""
+        for attempt in range(max_retries := 3):
+            prompt = base_prompt
+            if preprocess_feedback:
+                prompt += f"\n\nPREVIOUS ATTEMPT FAILED. FIX:\n{preprocess_feedback}"
                 
-            if not title and not primary:
-                raise ValueError("Both title and primary element are empty.")
+            try:
+                preprocessing_result = await call_llm_json(PREPROCESS_PROMPT, prompt)
                 
-            if slide_index > 0:
-                if not sups or not isinstance(sups, list) or len(sups) == 0:
-                    raise ValueError("Supporting elements are empty on non-initial slide.")
-                for s in sups:
-                    words = len(str(s).split())
-                    if words <= 2:
-                        raise ValueError("Supporting element is a single word or empty.")
-            
-            # Passed strict validation
-            break
-        except Exception as e:
-            logger.warning(f"Slide {slide_index + 1}: Preprocessing attempt {attempt + 1} failed: {e}")
-            preprocess_feedback = str(e)
-            if attempt == max_retries - 1:
-                logger.error(f"Slide {slide_index + 1}: Preprocessing failed validation after {max_retries} attempts.")
-                # Fallback must NEVER produce empty or single-word outputs
-                safe_title = content.get("title", f"Slide {slide_index + 1}")
-                if not str(safe_title).strip():
-                    safe_title = "Important Concept"
-                preprocessing_result = {
-                    "intent": intent_str or "content",
-                    "title": safe_title,
-                    "primary_element": safe_title,
-                    # "supporting_elements": ["This section covers key points about the topic."] if slide_index > 0 else [],
-                    "supporting_elements": [f"Key insight about {topic}"] if slide_index > 0 else [],
-                    "entities": []
-                }
+                # Extract and validate
+                title = preprocessing_result.get("title", "").strip()
+                primary = preprocessing_result.get("primary_element", "").strip()
+                sups = preprocessing_result.get("supporting_elements", [])
+                
+                if not title and primary:
+                    title = primary
+                    preprocessing_result["title"] = title
+                if not primary and title:
+                    primary = title
+                    preprocessing_result["primary_element"] = primary
+                    
+                if not title and not primary:
+                    raise ValueError("Both title and primary element are empty.")
+                    
+                if slide_index > 0:
+                    if not sups or not isinstance(sups, list) or len(sups) == 0:
+                        raise ValueError("Supporting elements are empty on non-initial slide.")
+                    for s in sups:
+                        words = len(str(s).split())
+                        if words <= 2:
+                            raise ValueError("Supporting element is a single word or empty.")
+                
+                # Passed strict validation
+                break
+            except Exception as e:
+                logger.warning(f"Slide {slide_index + 1}: Preprocessing attempt {attempt + 1} failed: {e}")
+                preprocess_feedback = str(e)
+                if attempt == max_retries - 1:
+                    logger.error(f"Slide {slide_index + 1}: Preprocessing failed validation after {max_retries} attempts.")
+                    # Fallback must NEVER produce empty or single-word outputs
+                    safe_title = content.get("title", f"Slide {slide_index + 1}")
+                    if not str(safe_title).strip():
+                        safe_title = "Important Concept"
+                    preprocessing_result = {
+                        "intent": intent_str or "content",
+                        "title": safe_title,
+                        "primary_element": safe_title,
+                        "supporting_elements": [f"Key insight about {topic}"] if slide_index > 0 else [],
+                        "entities": []
+                    }
     continuity_context["last_slide_summary"] = preprocessing_result.get("primary_element", "")
 
     # Step 8: Update memory tracking
@@ -400,7 +430,7 @@ Content:
             if not isinstance(render_result, dict):
                 raise ValueError("Render output not JSON dict.")
             html_content = render_result.get("html", "")
-            css_content = render_result.get("css", "")
+            css_content = "" if _is_layered_neutral_mode() else render_result.get("css", "")
         except Exception as e:
             logger.error(f"Slide {slide_index + 1}: RENDER attempt {attempt + 1} failed: {e}")
             continue
@@ -462,14 +492,14 @@ Content:
         enforcement_prompt += (
             f"\nFIX DIRECTIVE: {fix_dir}\n"
             f"You MUST preserve the meaning of all elements.\n"
-            f"You may slightly rephrase for visual clarity.\n"
-            f"Do NOT omit any idea or add unrelated content."
+            f"You MUST keep the missing elements verbatim.\n"
+            f"Do NOT rephrase, omit, reorder, summarize, or add unrelated content."
         )
         try:
             fix_render = await call_llm_json(RENDER_PROMPT, enforcement_prompt)
             if isinstance(fix_render, dict):
                 fixed_html = fix_render.get("html", "")
-                fixed_css = fix_render.get("css", "")
+                fixed_css = "" if _is_layered_neutral_mode() else fix_render.get("css", "")
                 # Verify the fix actually worked
                 still_missing = []
                 for elem in missing:
@@ -492,18 +522,15 @@ Content:
         except Exception as fix_err:
             logger.warning("Slide %d: INTEGRITY render fix failed: %s", slide_index + 1, fix_err)
 
-    custom_style = f"<style>{css_content}</style>" if css_content else ""
-
     final_html = _HTML_WRAPPER.format(
         slides_css=_load_slides_css(),
-        theme=_esc(theme_dict.get('background', 'dark')),
-        custom_style=custom_style,
+        render_system=_esc(_active_render_system()),
         inner_html=html_content
     )
     
     design_spec = {
         "slide_index": slide_index,
-        "theme": theme_dict.get('background', 'dark'),
+        "theme": DEFAULT_RENDER_SYSTEM,
         "layout": visual_plan.get("layout", "center_focus"),
         "components": {
             "type": preprocessing_result.get("intent", "content"),
@@ -524,17 +551,26 @@ async def run_dynamic_composition_engine(slides: list, state_theme: str, topic: 
     if not slides:
         return [], []
         
-    logger.info(f"[dynamic_composition] Generating strict theme consistency data for {state_theme}...")
-    try:
-        theme_dict = await call_llm_json(THEME_GENERATION_PROMPT, f"Desired theme name or tone: {state_theme}")
-    except Exception as e:
-        logger.error(f"[dynamic_composition] Theme generation failed: {e}")
+    if _is_layered_neutral_mode():
+        logger.info("[dynamic_composition] Using single render system: %s", DEFAULT_RENDER_SYSTEM)
         theme_dict = {
-            "background": "dark",
-            "primary_color": "white",
-            "font_scale": "massive headers, tiny constraints",
-            "spacing_scale": "cozy"
+            "background": "layered_neutral",
+            "primary_color": "#2563EB",
+            "font_scale": "investor-grade hierarchy",
+            "spacing_scale": "8px system",
         }
+    else:
+        logger.info(f"[dynamic_composition] Generating strict theme consistency data for {state_theme}...")
+        try:
+            theme_dict = await call_llm_json(THEME_GENERATION_PROMPT, f"Desired theme name or tone: {state_theme}")
+        except Exception as e:
+            logger.error(f"[dynamic_composition] Theme generation failed: {e}")
+            theme_dict = {
+                "background": "dark",
+                "primary_color": "white",
+                "font_scale": "massive headers, tiny constraints",
+                "spacing_scale": "cozy"
+            }
     
     logger.info(f"[dynamic_composition] Generating custom designs for {len(slides)} slides with theme={theme_dict.get('primary_color')}...")
     

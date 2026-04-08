@@ -19,7 +19,7 @@ export default function useEditor(jobId) {
   const [activeSlide, setActiveSlide] = useState(0);
   const [loading, setLoading] = useState(false);
   const [slideLoading, setSlideLoading] = useState(null); // slide_id being processed
-  const [theme, setTheme] = useState("dark_modern");
+  const [theme, setTheme] = useState("layered_neutral_card_system");
   const [error, setError] = useState(null);
 
   const loadSlides = useCallback(async () => {

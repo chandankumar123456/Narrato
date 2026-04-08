@@ -55,9 +55,9 @@ def build_render_instructions(slide_count: int) -> dict:
         "slide_count": slide_count,
         "export": ["png", "pdf"],
         "resolution": f"{VIEWPORT_WIDTH}x{VIEWPORT_HEIGHT}",
+        "render_mode": "continuous_scroll_sections",
         "quality": {
-            "no_overflow": True,
-            "no_scrolling": True,
+            "allow_vertical_scroll": True,
             "fixed_viewport": True,
             "stable_layout": True,
             "font_loaded": True,
@@ -127,18 +127,8 @@ async def render_slides_to_images(
             }
             """)
             
-            overflow = await page.evaluate("""
-            () => {
-            const el = document.body;
-            return el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth;
-            }
-            """)
-
-            if overflow:
-                raise ExportRenderError("Slide overflow detected — content exceeds bounds")
-
             png_path = os.path.join(output_dir, f"slide_{idx + 1}.png")
-            await page.screenshot(path=png_path, full_page=False)
+            await page.screenshot(path=png_path, full_page=True)
             image_paths.append(png_path)
             await page.close()
 
@@ -197,21 +187,11 @@ async def render_slides_to_pdf(
             }
             """)
 
-            overflow = await page.evaluate("""
-            () => {
-            const el = document.body;
-            return el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth;
-            }
-            """)
-
-            if overflow:
-                raise ExportRenderError("Slide overflow detected — content exceeds bounds")
-
             pdf_bytes = await page.pdf(
                 width=f"{VIEWPORT_WIDTH}px",
                 height=f"{VIEWPORT_HEIGHT}px",
                 print_background=True,
-                prefer_css_page_size=False,
+                prefer_css_page_size=True,
             )
             per_slide_pdfs.append(pdf_bytes)
             await page.close()
