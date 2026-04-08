@@ -36,7 +36,7 @@ export default function SlideCanvas({
     const el = sectionRefs.current[slideIndex];
     if (el) {
       const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      el.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest" });
+      el.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
     }
   }, [slideIndex]);
 

@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Outfit:wght@700;800&family=Space+Grotesk:wght@700&display=swap");
+
 /* Layered Neutral Card System — global, deterministic, CSS-only */
 
 :root {
@@ -23,6 +25,11 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+
+@page {
+  size: 1920px 1080px;
+  margin: 0;
+}
 
 html, body {
   margin: 0;
