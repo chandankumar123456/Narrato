@@ -12,7 +12,8 @@ html, body {
   height: 1080px;
   overflow: visible;
   -webkit-font-smoothing: antialiased;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", sans-serif;
+  font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  background: #f5f7fb;
 }
 
 @page{
@@ -33,7 +34,7 @@ html, body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 5.5rem 6rem 3rem;
+  padding: 5.25rem 5.75rem 3rem;
 }
 
 /* Pitch-deck index (reference: corner slide numbers) */
@@ -92,83 +93,83 @@ html, body {
 
 /* ── Theme: dark_modern ───────────────────────────────────────────── */
 .slide[data-theme="dark_modern"] {
-  background: linear-gradient(145deg, #000000 0%, #0a0a0f 45%, #111827 100%);
-  color: #ffffff;
-  --text-primary: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.72);
-  --text-muted: rgba(255, 255, 255, 0.42);
-  --card-bg: rgba(255, 255, 255, 0.07);
-  --card-border: rgba(255, 255, 255, 0.12);
-  --card-shadow: 0 25px 50px -12px rgba(139, 92, 246, 0.12);
-  --card-highlight-bg: rgba(255, 255, 255, 0.11);
-  --card-highlight-border: rgba(255, 255, 255, 0.2);
-  --accent: #c4b5fd;
-  --accent-line: linear-gradient(90deg, #a855f7, #ec4899);
-  --accent-glow: 0 10px 40px rgba(168, 85, 247, 0.2);
-  --title-grad: linear-gradient(90deg, #ffffff 0%, #e9d5ff 45%, #c4b5fd 100%);
-  --stat-color: #c4b5fd;
-  --step-bg: linear-gradient(135deg, #a855f7, #ec4899);
-  --step-connector: linear-gradient(180deg, rgba(168, 85, 247, 0.55), transparent);
-  --divider: rgba(255, 255, 255, 0.12);
-  --visual-mesh: radial-gradient(ellipse 80% 60% at 70% 40%, rgba(168, 85, 247, 0.25), transparent 55%),
-                  radial-gradient(ellipse 50% 50% at 30% 80%, rgba(236, 72, 153, 0.15), transparent 50%);
+  background: linear-gradient(160deg, #f7f8fc 0%, #eef2f7 52%, #e6ecf4 100%);
+  color: #0f172a;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --card-bg: #ffffff;
+  --card-border: rgba(148, 163, 184, 0.3);
+  --card-shadow: 0 14px 30px -18px rgba(15, 23, 42, 0.18);
+  --card-highlight-bg: #f8faff;
+  --card-highlight-border: rgba(79, 70, 229, 0.25);
+  --accent: #4f46e5;
+  --accent-line: linear-gradient(90deg, #4f46e5, #4f46e5);
+  --accent-glow: 0 10px 24px rgba(79, 70, 229, 0.14);
+  --title-grad: linear-gradient(90deg, #0f172a 0%, #1e293b 55%, #4f46e5 100%);
+  --stat-color: #4338ca;
+  --step-bg: #4f46e5;
+  --step-connector: linear-gradient(180deg, rgba(79, 70, 229, 0.4), transparent);
+  --divider: rgba(148, 163, 184, 0.35);
+  --visual-mesh: radial-gradient(ellipse 78% 52% at 78% 28%, rgba(79, 70, 229, 0.08), transparent 52%),
+                  radial-gradient(ellipse 44% 38% at 18% 78%, rgba(99, 102, 241, 0.06), transparent 48%);
 }
 
 /* ── Theme: minimal_light ─────────────────────────────────────────── */
 .slide[data-theme="minimal_light"] {
-  background: linear-gradient(160deg, #ffffff 0%, #f9fafb 50%, #e2e8f0 100%);
-  color: #111827;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  background: linear-gradient(162deg, #fbfcfe 0%, #f3f6fb 52%, #e9eef6 100%);
+  color: #0f172a;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
   --card-bg: #ffffff;
-  --card-border: rgba(229, 231, 235, 0.9);
-  --card-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.08);
-  --card-highlight-bg: rgba(238, 242, 255, 0.95);
-  --card-highlight-border: rgba(199, 210, 254, 0.8);
+  --card-border: rgba(148, 163, 184, 0.24);
+  --card-shadow: 0 14px 30px -18px rgba(15, 23, 42, 0.16);
+  --card-highlight-bg: #f8faff;
+  --card-highlight-border: rgba(79, 70, 229, 0.22);
   --accent: #4f46e5;
-  --accent-line: linear-gradient(90deg, #6366f1, #8b5cf6);
-  --accent-glow: 0 10px 30px rgba(99, 102, 241, 0.15);
-  --title-grad: linear-gradient(90deg, #111827 0%, #312e81 40%, #4f46e5 100%);
-  --stat-color: #4f46e5;
-  --step-bg: linear-gradient(135deg, #6366f1, #8b5cf6);
-  --step-connector: linear-gradient(180deg, rgba(99, 102, 241, 0.4), transparent);
-  --divider: #e5e7eb;
-  --visual-mesh: radial-gradient(ellipse 70% 50% at 75% 35%, rgba(99, 102, 241, 0.12), transparent 50%),
-                  radial-gradient(ellipse 40% 40% at 20% 70%, rgba(139, 92, 246, 0.08), transparent 50%);
+  --accent-line: linear-gradient(90deg, #4f46e5, #4f46e5);
+  --accent-glow: 0 10px 24px rgba(79, 70, 229, 0.13);
+  --title-grad: linear-gradient(90deg, #0f172a 0%, #1e293b 56%, #4f46e5 100%);
+  --stat-color: #4338ca;
+  --step-bg: #4f46e5;
+  --step-connector: linear-gradient(180deg, rgba(79, 70, 229, 0.35), transparent);
+  --divider: #dbe2ec;
+  --visual-mesh: radial-gradient(ellipse 68% 50% at 76% 33%, rgba(79, 70, 229, 0.07), transparent 50%),
+                  radial-gradient(ellipse 44% 40% at 18% 74%, rgba(99, 102, 241, 0.05), transparent 50%);
 }
 
 /* ── Theme: bold_gradient ─────────────────────────────────────────── */
 .slide[data-theme="bold_gradient"] {
-  background: linear-gradient(145deg, #1e1b4b 0%, #581c87 50%, #9d174d 100%);
-  color: #ffffff;
-  --text-primary: #ffffff;
-  --text-secondary: rgba(252, 231, 243, 0.85);
-  --text-muted: rgba(251, 207, 232, 0.45);
-  --card-bg: rgba(255, 255, 255, 0.1);
-  --card-border: rgba(255, 255, 255, 0.15);
-  --card-shadow: 0 25px 50px -12px rgba(236, 72, 153, 0.15);
-  --card-highlight-bg: rgba(255, 255, 255, 0.16);
-  --card-highlight-border: rgba(255, 255, 255, 0.28);
-  --accent: #fbcfe8;
-  --accent-line: linear-gradient(90deg, #f472b6, #fbbf24);
-  --accent-glow: 0 10px 40px rgba(244, 114, 182, 0.25);
-  --title-grad: linear-gradient(90deg, #ffffff 0%, #fce7f3 40%, #fde68a 100%);
-  --stat-color: #fbcfe8;
-  --step-bg: linear-gradient(135deg, #ec4899, #f59e0b);
-  --step-connector: linear-gradient(180deg, rgba(244, 114, 182, 0.5), transparent);
-  --divider: rgba(255, 255, 255, 0.15);
-  --visual-mesh: radial-gradient(ellipse 75% 55% at 65% 45%, rgba(244, 114, 182, 0.3), transparent 55%),
-                  radial-gradient(ellipse 45% 45% at 25% 75%, rgba(251, 191, 36, 0.12), transparent 50%);
+  background: linear-gradient(158deg, #f8f9ff 0%, #eff3fb 54%, #e6ecf6 100%);
+  color: #0f172a;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --card-bg: #ffffff;
+  --card-border: rgba(148, 163, 184, 0.27);
+  --card-shadow: 0 14px 30px -18px rgba(15, 23, 42, 0.17);
+  --card-highlight-bg: #f8faff;
+  --card-highlight-border: rgba(79, 70, 229, 0.24);
+  --accent: #4f46e5;
+  --accent-line: linear-gradient(90deg, #4f46e5, #4f46e5);
+  --accent-glow: 0 10px 24px rgba(79, 70, 229, 0.14);
+  --title-grad: linear-gradient(90deg, #0f172a 0%, #1e293b 56%, #4f46e5 100%);
+  --stat-color: #4338ca;
+  --step-bg: #4f46e5;
+  --step-connector: linear-gradient(180deg, rgba(79, 70, 229, 0.4), transparent);
+  --divider: #dce4f0;
+  --visual-mesh: radial-gradient(ellipse 70% 54% at 70% 35%, rgba(79, 70, 229, 0.08), transparent 56%),
+                  radial-gradient(ellipse 42% 40% at 24% 74%, rgba(99, 102, 241, 0.05), transparent 50%);
 }
 
 /* ── Typography scale (hierarchy) ──────────────────────────────────── */
 .slide-title-display {
   margin: 0;
-  font-size: 6rem;
+  font-size: 5.4rem;
   font-weight: 800;
-  line-height: 1.02;
-  letter-spacing: -0.035em;
+  line-height: 1.04;
+  letter-spacing: -0.03em;
   background: var(--title-grad);
   -webkit-background-clip: text;
   background-clip: text;
@@ -226,18 +227,18 @@ html, body {
 }
 
 .slide-subtitle-hero {
-  margin: 2.25rem auto 0;
-  max-width: 38rem;
-  font-size: 1.35rem;
+  margin: 2rem auto 0;
+  max-width: 34rem;
+  font-size: 1.2rem;
   font-weight: 400;
-  line-height: 1.6;
+  line-height: 1.58;
   color: var(--text-secondary);
 }
 
 .slide-title-section {
   margin: 0;
-  font-size: 3.5rem;
-  font-weight: 700;
+  font-size: 3.2rem;
+  font-weight: 750;
   letter-spacing: -0.028em;
   line-height: 1.08;
   background: var(--title-grad);
@@ -267,22 +268,25 @@ html, body {
 }
 
 .slide-body {
-  font-size: 1.25rem;
-  line-height: 1.6;
+  font-size: 1.15rem;
+  line-height: 1.62;
   color: var(--text-secondary);
+  max-width: 62ch;
 }
 
 .slide-body-lg {
-  font-size: 1.35rem;
-  line-height: 1.55;
+  font-size: 1.25rem;
+  line-height: 1.58;
   font-weight: 500;
   color: var(--text-secondary);
+  max-width: 56ch;
 }
 
 .slide-body-sm {
-  font-size: 1.05rem;
-  line-height: 1.55;
+  font-size: 1rem;
+  line-height: 1.58;
   color: var(--text-secondary);
+  max-width: 66ch;
 }
 
 .stat-value {
@@ -302,7 +306,7 @@ html, body {
   font-weight: 900;
   letter-spacing: -0.04em;
   color: var(--stat-color);
-  text-shadow: 0 4px 48px rgba(168, 85, 247, 0.15);
+  text-shadow: none;
 }
 
 .stat-label-mega {
@@ -362,11 +366,11 @@ html, body {
 }
 
 .section-head {
-  margin-bottom: 3.5rem;
+  margin-bottom: 3rem;
 }
 
 .section-head--compact {
-  margin-bottom: 2.25rem;
+  margin-bottom: 2rem;
 }
 
 .section-head--stats {
@@ -481,7 +485,7 @@ html, body {
 /* ── Layout: grid cards ─────────────────────────────────────────────── */
 .layout-grid {
   width: 100%;
-  max-width: 72rem;
+  max-width: 70rem;
   margin: 0 auto;
   flex: 1;
   display: flex;
@@ -492,15 +496,15 @@ html, body {
 .grid-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
+  gap: 1.65rem;
   align-items: stretch;
 }
 
 .card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
-  border-radius: 1.25rem;
-  padding: 2rem;
+  border-radius: 1rem;
+  padding: 2.1rem;
   box-shadow: var(--card-shadow);
 }
 
@@ -508,8 +512,8 @@ html, body {
   grid-column: span 2;
   background: var(--card-highlight-bg);
   border-color: var(--card-highlight-border);
-  border-radius: 1.75rem;
-  padding: 2.5rem;
+  border-radius: 1.4rem;
+  padding: 2.35rem;
   box-shadow: var(--card-shadow), var(--accent-glow);
 }
 
@@ -528,10 +532,11 @@ html, body {
 
 .card-support {
   margin: 0;
-  font-size: 1.05rem;
-  line-height: 1.55;
+  font-size: 1rem;
+  line-height: 1.6;
   color: var(--text-secondary);
   font-weight: 400;
+  max-width: 54ch;
 }
 
 .card-body-unified {
@@ -574,9 +579,9 @@ html, body {
 
 .grid-intro-paragraph {
   margin: 0 0 2rem;
-  max-width: 52rem;
-  font-size: 1.2rem;
-  line-height: 1.65;
+  max-width: 50rem;
+  font-size: 1.1rem;
+  line-height: 1.68;
   color: var(--text-secondary);
   font-weight: 400;
 }
@@ -672,8 +677,8 @@ html, body {
 .stat-cell {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
-  border-radius: 1.25rem;
-  padding: 2rem;
+  border-radius: 1rem;
+  padding: 2.1rem;
   text-align: center;
   box-shadow: var(--card-shadow);
 }
@@ -682,8 +687,8 @@ html, body {
   grid-column: span 2;
   background: var(--card-highlight-bg);
   border-color: var(--card-highlight-border);
-  border-radius: 1.75rem;
-  padding: 2.5rem;
+  border-radius: 1.4rem;
+  padding: 2.35rem;
   text-align: center;
   position: relative;
   overflow: hidden;
@@ -798,7 +803,7 @@ html, body {
   width: 100%;
   max-width: 80rem;
   margin: 0 auto;
-  gap: 4rem;
+  gap: 3.25rem;
   flex: 1;
   align-items: center;
 }
@@ -839,10 +844,11 @@ html, body {
 
 .split-body-support {
   margin: 0 0 1.5rem;
-  font-size: 1.125rem;
-  line-height: 1.6;
+  font-size: 1.05rem;
+  line-height: 1.62;
   color: var(--text-secondary);
   font-weight: 400;
+  max-width: 56ch;
 }
 
 .split-body-unified {
@@ -865,8 +871,8 @@ html, body {
   align-items: flex-start;
   gap: 0.75rem;
   margin-bottom: 1rem;
-  font-size: 1.125rem;
-  line-height: 1.55;
+  font-size: 1.05rem;
+  line-height: 1.6;
   color: var(--text-secondary);
 }
 
@@ -889,7 +895,7 @@ html, body {
   width: 100%;
   max-width: 36rem;
   min-height: 24rem;
-  border-radius: 1.75rem;
+  border-radius: 1.35rem;
   border: 1px solid var(--card-border);
   background: var(--card-bg);
   box-shadow: var(--card-shadow);
@@ -918,7 +924,7 @@ html, body {
 .mini-card {
   background: var(--card-highlight-bg);
   border: 1px solid var(--card-highlight-border);
-  border-radius: 1rem;
+  border-radius: 0.9rem;
   padding: 1.25rem 1.5rem;
   font-size: 1.05rem;
   line-height: 1.5;
@@ -970,8 +976,8 @@ html, body {
   display: flex;
   align-items: center;
   gap: 1.25rem;
-  border-radius: 1.25rem;
-  padding: 1.75rem;
+  border-radius: 1rem;
+  padding: 1.85rem;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   box-shadow: var(--card-shadow);
@@ -1124,10 +1130,11 @@ html, body {
 }
 
 .timeline-text {
-  font-size: 1.05rem;
+  font-size: 1rem;
   color: var(--text-secondary);
-  line-height: 1.55;
+  line-height: 1.6;
   margin: 0;
+  max-width: 56ch;
 }
 
 .timeline-body {
