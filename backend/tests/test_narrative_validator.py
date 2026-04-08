@@ -24,6 +24,8 @@ def test_validate_narrative_arc_marks_weak_causal_fields_invalid():
     result = validate_narrative_arc(arc)
     assert result["invalid_slide_indices"] == [0, 1]
     assert any("weak or missing cause_from_previous" in v for v in result["violations"])
+    assert any("weak or missing narrative_delta" in v for v in result["violations"])
+    assert any("weak or missing forward_tension" in v for v in result["violations"])
     assert any("weak or missing transition_reason" in v for v in result["violations"])
 
 

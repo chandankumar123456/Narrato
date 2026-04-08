@@ -471,9 +471,7 @@ async def run_pipeline(prompt: str, options: dict = {},
                             "[pipeline] Narrative invalid slides remain after regeneration: %s",
                             "; ".join(second_validation.get("violations", [])),
                         )
-                        state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
-                    else:
-                        state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
+                    state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
                 else:
                     state = state.model_copy(update={"narrative_arc": validation.get("slides", [])})
             except Exception as e:
@@ -505,9 +503,7 @@ async def run_pipeline(prompt: str, options: dict = {},
                             "[pipeline] Narrative invalid slides remain after regeneration: %s",
                             "; ".join(second_validation.get("violations", [])),
                         )
-                        state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
-                    else:
-                        state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
+                    state = state.model_copy(update={"narrative_arc": second_validation.get("slides", [])})
                 else:
                     state = state.model_copy(update={"narrative_arc": validation.get("slides", [])})
             except Exception as e:

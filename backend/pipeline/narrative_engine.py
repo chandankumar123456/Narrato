@@ -706,6 +706,7 @@ async def regenerate_invalid_narrative_slides(
     invalid_indices: list[int],
     business_context: dict | None = None,
 ) -> list[dict]:
+    """Regenerate only invalid narrative slides once, preserving healthy slides."""
     if not invalid_indices:
         return narrative_arc
 
