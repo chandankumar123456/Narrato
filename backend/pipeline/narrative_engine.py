@@ -500,6 +500,12 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
     """
 
     system_prompt = NARRATIVE_ENGINE_SYSTEM_PROMPT.format(slide_count=state.slide_count)
+    context = (state.metadata or {}).get("context", {}) if isinstance(state.metadata, dict) else {}
+    deck_goal = str(context.get("deck_goal", "")).strip()
+    context_audience = str(context.get("audience", "")).strip()
+    context_tone = str(context.get("tone", "")).strip()
+    context_topic = str(context.get("topic", "")).strip()
+
     user_prompt = f"""
         {business_text}
 
@@ -524,6 +530,70 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
         Context → Problem → Tension → Insight → Solution → Impact → Closure
 
         Output strictly JSON.
+
+        ---
+
+        You are generating a structured presentation narrative.
+
+        CONTEXT:
+
+        * Goal: {deck_goal}
+        * Audience: {context_audience}
+        * Tone: {context_tone}
+        * Topic: {context_topic}
+
+        ---
+
+        STRICT SLIDE FLOW (MANDATORY):
+
+        You MUST structure the narrative into the following logical sequence:
+
+        1. Problem / Context
+        2. Impact / Why it matters
+        3. Solution / Idea
+        4. Proof / Evidence / Data
+        5. Next Steps / Conclusion
+
+        ---
+
+        STRUCTURE RULES:
+
+        * Each section MUST naturally lead to the next
+        * Do NOT jump randomly between topics
+        * Do NOT mix multiple sections in one part
+        * Maintain consistent tone across all sections
+        * Avoid repetition
+
+        ---
+
+        SLIDE-AWARE GENERATION:
+
+        For EACH section, ensure:
+
+        * One clear primary idea (this becomes primary_element)
+        * 2–3 supporting ideas (this becomes supporting_elements)
+
+        DO NOT generate vague paragraphs.
+
+        Generate content that can be easily split into slides.
+
+        ---
+
+        TRANSITION RULE:
+
+        Each section must implicitly answer:
+
+        "Why does the next section follow from this one?"
+
+        Ensure logical progression, not just topic listing.
+
+        ---
+
+        OUTPUT REQUIREMENT:
+
+        * Generate a full narrative that follows the sequence above
+        * Ensure it can be cleanly divided into slides
+        * Ensure progression is logical and smooth
     """
 
     max_retries = 2
