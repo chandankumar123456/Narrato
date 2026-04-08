@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo } from "react";
 
 /**
  * Continuous canvas — renders all slides in a single vertical narrative surface.
@@ -16,6 +16,10 @@ export default function SlideCanvas({
 }) {
   const containerRef = useRef(null);
   const sectionRefs = useRef([]);
+  const prefersReducedMotion = useMemo(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    []
+  );
 
   useEffect(() => {
     function handleKey(e) {
@@ -35,10 +39,9 @@ export default function SlideCanvas({
   useEffect(() => {
     const el = sectionRefs.current[slideIndex];
     if (el) {
-      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      el.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
+      el.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "center" });
     }
-  }, [slideIndex]);
+  }, [slideIndex, prefersReducedMotion]);
 
   if (!slides || slides.length === 0) {
     return (
