@@ -11,7 +11,7 @@ SLIDE_ROLE_SEQUENCE = [
     "Ask",
 ]
 _SLIDE_ROLE_RANK = {role: idx for idx, role in enumerate(SLIDE_ROLE_SEQUENCE)}
-_MIN_MEANINGFUL_WORDS = 5
+_MIN_MEANINGFUL_WORDS = 8
 _GENERIC_PHRASES = (
     "follows logically",
     "next step",
@@ -53,7 +53,9 @@ def _references_previous_key_message(cause_text: str, previous_key_message: str)
     prev_tokens = _extract_tokens(previous_key_message)
     if not prev_tokens:
         return False
-    return any(token in cause_tokens for token in prev_tokens)
+    # return any(token in cause_tokens for token in prev_tokens)
+    overlap = set(prev_tokens) & cause_tokens
+    return len(overlap) >= 2
 
 
 def validate_narrative_arc(narrative_arc):
