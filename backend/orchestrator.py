@@ -34,6 +34,13 @@ import re
 
 logger = logging.getLogger(__name__)
 
+INVESTOR_MODE_KEYWORDS = (
+    "pitch deck", "startup", "funding", "saas", "product", "growth", "business", "investor",
+)
+ACADEMIC_MODE_KEYWORDS = (
+    "seminar", "theory", "explanation", "subject learning",
+)
+
 
 class PipelineFailure(Exception):
     """Raised when a critical pipeline stage fails, stopping the pipeline immediately."""
@@ -107,6 +114,16 @@ def _extract_context(prompt: str) -> dict:
             deduped.append(p)
     context["key_points"] = deduped
     return context
+
+
+def _detect_presentation_mode(prompt: str) -> str:
+    """Classify prompt into investor, academic, or generic mode."""
+    prompt_lower = (prompt or "").lower()
+    if any(keyword in prompt_lower for keyword in INVESTOR_MODE_KEYWORDS):
+        return "investor"
+    if any(keyword in prompt_lower for keyword in ACADEMIC_MODE_KEYWORDS):
+        return "academic"
+    return "generic"
 
 
 def _initialize_deck_state(context: dict, slide_count: int) -> dict:
@@ -331,14 +348,9 @@ async def run_pipeline(prompt: str, options: dict = {},
     try:
         signals = await parse_prompt(prompt)
         signals.update({k: v for k, v in options.items() if v is not None and not k.startswith("_")})
-        # ── Detect investor mode ─────────────────────────
-        deck_mode = "general"
-        prompt_lower = prompt.lower()
-
-        if any(x in prompt_lower for x in ["pitch deck", "investor", "startup"]):
-            deck_mode = "investor"
-
-        signals["deck_mode"] = deck_mode
+        presentation_mode = _detect_presentation_mode(prompt)
+        signals["presentation_mode"] = presentation_mode
+        signals["deck_mode"] = "investor" if presentation_mode == "investor" else "general"
         
     except Exception as exc:
         _fail("prompt_parse", str(exc))
@@ -355,10 +367,11 @@ async def run_pipeline(prompt: str, options: dict = {},
     # ── Stage 2: Build state ──────────────────────────────────────
     state = build_state(signals, user_schema=user_schema)
     state.user_schema = user_schema or {}
-    deck_mode = signals.get("deck_mode", "general")
+    deck_mode = "investor" if state.presentation_mode == "investor" else "general"
     metadata = dict(state.metadata or {})
     metadata["context"] = context
     metadata["deck_state"] = _initialize_deck_state(context, state.slide_count)
+    metadata["presentation_mode"] = state.presentation_mode
     state = state.model_copy(update={"metadata": metadata})
     
     total_slides = state.slide_count

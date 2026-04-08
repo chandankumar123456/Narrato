@@ -20,6 +20,7 @@ class PresentationState(BaseModel):
     min_slides: int = 5
     max_slides: int = 30
     sections: Optional[list[str]] = None
+    presentation_mode: str = "generic"  # "investor" | "academic" | "generic"
 
     # Tone
     tone: str = "professional"

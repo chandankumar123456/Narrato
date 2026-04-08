@@ -66,15 +66,23 @@ async def run_content_engine(state: PresentationState) -> PresentationState:
 
     logger.info(f"[content_engine] Generating slide content for {len(state.narrative_arc)} slides")
 
-    # ✅ Use arc only if narrative mode
-    if getattr(state, "deck_mode", "general") == "investor":
-        arc_json = "Use structured sections (problem, solution, market, etc.)"
-    else:
-        arc_json = json.dumps(state.narrative_arc, indent=2)
+    presentation_mode = getattr(state, "presentation_mode", "generic")
+    arc_json = json.dumps(state.narrative_arc, indent=2)
+
+    mode_instructions = ""
+    if presentation_mode == "investor":
+        mode_instructions = """
+Investor emphasis rules (MANDATORY):
+- Each input slide includes an importance field: high or low.
+- HIGH importance slides: sharpen claims, emphasize outcomes, impact, value, and scale.
+- LOW importance slides: keep concise, minimal, no deep explanations.
+- Do not give equal depth or tone to every slide.
+- Keep logical flow and avoid repetition.
+"""
 
     user_prompt = f"""Topic: {state.topic}
 Type: {state.presentation_type}
-Deck Mode: {getattr(state, "deck_mode", "general")}
+Presentation Mode: {presentation_mode}
 Audience: {state.audience}
 
 Here is the structure:
@@ -82,6 +90,7 @@ Here is the structure:
 
 Generate EXACTLY {len(state.narrative_arc)} slides.
 Each slide must map 1:1.
+{mode_instructions}
 
 Return structured_slides with same length.
 """
