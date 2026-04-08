@@ -5,6 +5,10 @@ from pipeline.narrative_engine import (
     _apply_investor_importance_weighting,
     _has_high_impact_slide,
     _inject_high_impact_slide,
+    validate_narrative_arc,
+    TRANSITION_REPAIR_TEXT,
+    CAUSE_REPAIR_TEXT,
+    NEXT_TRIGGER_REPAIR_TEXT,
 )
 from pipeline.state_builder import build_state
 
@@ -63,3 +67,56 @@ def test_investor_controls_inject_high_impact_slide():
     assert _has_high_impact_slide(injected)
     assert any(s.get("importance") == "high" for s in injected)
 
+
+def test_validate_narrative_arc_repairs_weak_fields_without_failure():
+    slides = [
+        {
+            "intent": "context",
+            "role_in_story": "Context",
+            "key_message": "Opening setup",
+            "transition_reason": "",
+            "emotional_tone": "neutral",
+            "cause": "",
+            "tension": "",
+            "resolution": "",
+            "next_trigger": "next step",
+            "importance": "low",
+        },
+        {
+            "intent": "problem",
+            "role_in_story": "Problem",
+            "key_message": "Core problem",
+            "transition_reason": "next step",
+            "emotional_tone": "urgent",
+            "cause": "follows previous idea",
+            "tension": "high pressure",
+            "resolution": "",
+            "next_trigger": "then we see",
+            "importance": "high",
+        },
+    ]
+
+    repaired = validate_narrative_arc(slides, target_count=2)
+    assert len(repaired) == 2
+    assert repaired[0]["importance"] == "low"
+    assert repaired[1]["importance"] == "high"
+    assert repaired[1]["transition_reason"] == TRANSITION_REPAIR_TEXT
+    assert repaired[1]["cause"] == CAUSE_REPAIR_TEXT
+    assert repaired[1]["next_trigger"] == NEXT_TRIGGER_REPAIR_TEXT
+
+
+def test_validate_narrative_arc_fills_required_keys_softly():
+    repaired = validate_narrative_arc([{"key_message": "Only one field"}], target_count=1)
+    slide = repaired[0]
+    for key in {
+        "intent",
+        "role_in_story",
+        "key_message",
+        "transition_reason",
+        "emotional_tone",
+        "cause",
+        "tension",
+        "resolution",
+        "next_trigger",
+    }:
+        assert key in slide

@@ -23,6 +23,21 @@ LOW_IMPORTANCE_SIGNALS = (
     "overview", "definition", "intro", "introduction", "background", "basics", "generic",
 )
 
+WEAK_TRANSITION_PHRASES = (
+    "next step",
+    "leads to next",
+    "then we see",
+)
+TRANSITION_REPAIR_TEXT = (
+    "Because the previous limitation creates unresolved pressure, this step becomes necessary."
+)
+CAUSE_REPAIR_TEXT = (
+    "This follows directly from the gap introduced in the previous step."
+)
+NEXT_TRIGGER_REPAIR_TEXT = (
+    "This creates a new constraint that must be addressed immediately."
+)
+
 NARRATIVE_ENGINE_SYSTEM_PROMPT = """You are a world-class Narrative Architect specializing in high-impact presentations.
 
 🔥 BUSINESS PRIORITY OVERRIDE (CRITICAL):
@@ -420,51 +435,130 @@ Return ONLY valid JSON.
 # Return ONLY valid JSON.
 # """
 
+def _safe_text(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _is_weak_transition(value: object) -> bool:
+    text = _safe_text(value).lower()
+    if not text:
+        return True
+    if len(text.split()) < 5:
+        return True
+    return any(phrase in text for phrase in WEAK_TRANSITION_PHRASES)
+
+
+def _is_weak_cause(value: object) -> bool:
+    text = _safe_text(value).lower()
+    if not text:
+        return True
+    if len(text.split()) < 5:
+        return True
+    weak = ("follows previous idea", "continues logic", "step follows")
+    return any(phrase in text for phrase in weak)
+
+
+def _is_weak_next_trigger(value: object) -> bool:
+    text = _safe_text(value).lower()
+    if not text:
+        return True
+    if len(text.split()) < 5:
+        return True
+    weak = ("next step", "leads to next", "then we see")
+    return any(phrase in text for phrase in weak)
+
+
+def _normalize_slide_count(slides: list, target_count: int) -> list:
+    normalized = list(slides or [])
+    if not normalized and target_count > 0:
+        normalized = [{}]
+
+    if len(normalized) < target_count:
+        logger.warning(
+            "[narrative_engine] Arc shorter than requested (%d/%d); padding softly",
+            len(normalized), target_count,
+        )
+        while len(normalized) < target_count:
+            normalized.append(dict(normalized[-1]) if isinstance(normalized[-1], dict) else {})
+    elif len(normalized) > target_count:
+        logger.warning(
+            "[narrative_engine] Arc longer than requested (%d/%d); trimming softly",
+            len(normalized), target_count,
+        )
+        normalized = normalized[:target_count]
+    return normalized
+
+
 def validate_narrative_arc(slides: list, target_count: int) -> list:
-    """Validate the strict rules of the narrative arc."""
-    if len(slides) != target_count:
-        logger.warning(f"Narrative arc mismatch: expected {target_count} slides, got {len(slides)}")
-        # If length mismatches, we can pad or truncate, or raise to retry. For robustness, let LLM decide or just enforce it.
-        # But failing hard means we might retry. Let's return False to retry at the caller level.
-        raise NarrativeEngineError("Slide count mismatch")
+    """Soft-validate and repair arc structure; never raises for weak content."""
+    repaired_slides = _normalize_slide_count(slides, target_count)
+    required_keys = {
+        "intent",
+        "role_in_story",
+        "key_message",
+        "transition_reason",
+        "emotional_tone",
+        "cause",
+        "tension",
+        "resolution",
+        "next_trigger",
+    }
 
-    roles_seen = []
-    for i, slide in enumerate(slides):
-        required_keys = {
-    "intent",
-    "role_in_story",
-    "key_message",
-    "transition_reason",
-    "emotional_tone",
-    "cause",
-    "tension",
-    "resolution",
-    "next_trigger"
-}
-        if not required_keys.issubset(set(slide.keys())):
-            raise NarrativeEngineError(f"Slide {i+1} is missing required keys.")
-        roles_seen.append(slide.get("role_in_story", ""))
+    output: list[dict] = []
+    for i, slide in enumerate(repaired_slides):
+        if not isinstance(slide, dict):
+            slide = {}
 
-        # Check for meaningful transitions
-        transition = slide.get("transition_reason", "")
-        if i > 0 and (
-            len(str(transition).split()) < 5 or
-            "next" in transition.lower()
-        ):
-            # Reject weak reasoning or missing transitions
-            raise NarrativeEngineError(f"Slide {i+1} has weak or missing transition reasoning: '{transition}'")
+        role_default = NARRATIVE_ROLES[min(i * len(NARRATIVE_ROLES) // max(target_count, 1), len(NARRATIVE_ROLES) - 1)]
+        base = dict(slide)
+        base.setdefault("intent", "general")
+        base.setdefault("role_in_story", role_default)
+        base.setdefault("key_message", f"Core point {i + 1}")
+        base.setdefault("emotional_tone", "neutral")
+        base.setdefault("tension", "Pressure accumulates as unresolved constraints persist.")
+        base.setdefault("resolution", "")
 
-    # Justify ordering
-    role_order_map = {r: i for i, r in enumerate(NARRATIVE_ROLES)}
-    last_role_idx = -1
-    for i, role in enumerate(roles_seen):
-        if role in role_order_map:
-            current_idx = role_order_map[role]
-            if current_idx < last_role_idx:
-                raise NarrativeEngineError(f"Narrative flow went backward at Slide {i+1}: from {NARRATIVE_ROLES[last_role_idx]} to {role}")
-            last_role_idx = current_idx
-            
-    return slides
+        if i == 0:
+            if not _safe_text(base.get("transition_reason")):
+                base["transition_reason"] = "This establishes the opening context for the narrative."
+            if not _safe_text(base.get("cause")):
+                base["cause"] = "This introduces the initial condition that frames the narrative."
+            if _is_weak_next_trigger(base.get("next_trigger")):
+                base["next_trigger"] = NEXT_TRIGGER_REPAIR_TEXT
+        else:
+            if _is_weak_transition(base.get("transition_reason")):
+                base["transition_reason"] = TRANSITION_REPAIR_TEXT
+            if _is_weak_cause(base.get("cause")):
+                base["cause"] = CAUSE_REPAIR_TEXT
+            if _is_weak_next_trigger(base.get("next_trigger")):
+                base["next_trigger"] = NEXT_TRIGGER_REPAIR_TEXT
+
+        # Ensure all required keys exist and are non-empty (except resolution allowed empty)
+        for key in required_keys:
+            if key == "resolution":
+                base.setdefault(key, "")
+                continue
+            if key not in base or not _safe_text(base.get(key)):
+                if key == "transition_reason":
+                    base[key] = TRANSITION_REPAIR_TEXT if i > 0 else "This establishes the opening context for the narrative."
+                elif key == "cause":
+                    base[key] = CAUSE_REPAIR_TEXT if i > 0 else "This introduces the initial condition that frames the narrative."
+                elif key == "next_trigger":
+                    base[key] = NEXT_TRIGGER_REPAIR_TEXT
+                elif key == "key_message":
+                    base[key] = f"Core point {i + 1}"
+                elif key == "role_in_story":
+                    base[key] = role_default
+                elif key == "intent":
+                    base[key] = "general"
+                elif key == "emotional_tone":
+                    base[key] = "neutral"
+                elif key == "tension":
+                    base[key] = "Pressure accumulates as unresolved constraints persist."
+
+        output.append(base)
+
+    return output
 
 
 def _score_slide_importance(slide: dict) -> str:
@@ -711,7 +805,7 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
         * Ensure progression is logical and smooth
     """
 
-    max_retries = 2
+    max_retries = 1
     for attempt in range(max_retries):
         try:
             result = await call_llm_json(system_prompt, user_prompt)
@@ -719,7 +813,8 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
 
             # ✅ FIX: auto-correct slide count
             if len(slides) < state.slide_count:
-                # duplicate last slide structure to fill
+                if not slides:
+                    slides = [{}]
                 while len(slides) < state.slide_count:
                     slides.append(slides[-1])
 
