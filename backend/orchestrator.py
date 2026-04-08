@@ -30,6 +30,7 @@ from services.event_system import PipelineEvent, EventType
 import logging
 import os
 from typing import Callable, Optional
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,241 @@ def _compute_progress(completed: int, total: int) -> int:
     if total <= 0:
         return 0
     return min(100, max(0, int((completed / total) * 100)))
+
+
+def _extract_context(prompt: str) -> dict:
+    """Extract deterministic deck context directly from raw prompt text."""
+    context = {
+        "deck_goal": "",
+        "audience": "",
+        "tone": "",
+        "topic": "",
+        "key_points": [],
+    }
+    if not prompt:
+        return context
+
+    lines = [ln.strip() for ln in prompt.splitlines() if ln.strip()]
+
+    def _value_after(prefixes: list[str]) -> str:
+        for ln in lines:
+            low = ln.lower()
+            for p in prefixes:
+                token = f"{p.lower()}:"
+                if low.startswith(token):
+                    return ln[len(token):].strip()
+        return ""
+
+    context["deck_goal"] = _value_after(["deck_goal", "goal", "objective"])
+    context["audience"] = _value_after(["audience"])
+    context["tone"] = _value_after(["tone", "style"])
+    context["topic"] = _value_after(["topic", "subject"])
+
+    if not context["topic"]:
+        match = re.search(r"\babout\s+([^\n\.\,\;\:]+)", prompt, flags=re.IGNORECASE)
+        if match:
+            context["topic"] = match.group(1).strip()
+
+    key_points: list[str] = []
+    kp_start = None
+    for idx, ln in enumerate(lines):
+        if ln.lower().startswith(("key points:", "key_points:", "keypoints:")):
+            kp_start = idx
+            maybe_inline = ln.split(":", 1)[1].strip()
+            if maybe_inline:
+                key_points.extend([p.strip() for p in re.split(r"[;,]", maybe_inline) if p.strip()])
+            break
+
+    if kp_start is not None:
+        for ln in lines[kp_start + 1:]:
+            if re.match(r"^[A-Za-z_ ]+:\s*", ln):
+                break
+            item = re.sub(r"^\s*(?:[-*]|\d+[\.\)])\s*", "", ln).strip()
+            if item:
+                key_points.append(item)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for p in key_points:
+        k = p.lower()
+        if k not in seen:
+            seen.add(k)
+            deduped.append(p)
+    context["key_points"] = deduped
+    return context
+
+
+def _initialize_deck_state(context: dict, slide_count: int) -> dict:
+    return {
+        "goal": context.get("deck_goal", ""),
+        "topic": context.get("topic", ""),
+        "slide_count": int(slide_count or 0),
+    }
+
+
+def _extract_primary_supporting(slide: dict) -> tuple[str, list[str]]:
+    primary = str(slide.get("primary_element", "")).strip()
+    supporting = slide.get("supporting_elements", [])
+    if isinstance(supporting, list):
+        supporting = [str(s).strip() for s in supporting if str(s).strip()]
+    else:
+        supporting = []
+
+    content = slide.get("content", {}) if isinstance(slide.get("content"), dict) else {}
+    if not primary:
+        primary = str(content.get("title", "")).strip() or str(content.get("subtitle", "")).strip()
+
+    if not supporting and content:
+        for key, val in content.items():
+            if key in {"title", "subtitle"}:
+                continue
+            if isinstance(val, str) and val.strip():
+                supporting.append(val.strip())
+            elif isinstance(val, list):
+                for item in val:
+                    if isinstance(item, dict):
+                        text = " ".join(str(v).strip() for v in item.values() if str(v).strip()).strip()
+                        if text:
+                            supporting.append(text)
+                    elif str(item).strip():
+                        supporting.append(str(item).strip())
+    return primary, supporting
+
+
+def _classify_slide_bucket(slide: dict) -> Optional[str]:
+    primary, supporting = _extract_primary_supporting(slide)
+    text = " ".join([
+        str(slide.get("intent", "")),
+        str(slide.get("role", "")),
+        str(slide.get("role_in_story", "")),
+        primary,
+        " ".join(supporting),
+    ]).lower()
+    if any(k in text for k in ["problem", "pain", "challenge", "issue", "risk"]):
+        return "problem"
+    if any(k in text for k in ["impact", "consequence", "cost", "urgency", "effect"]):
+        return "impact"
+    if any(k in text for k in ["solution", "approach", "strategy", "fix"]):
+        return "solution"
+    if any(k in text for k in ["proof", "stat", "stats", "metric", "data", "evidence", "traction", "result"]):
+        return "proof"
+    if any(k in text for k in ["next step", "next_steps", "roadmap", "action", "closing", "conclusion", "cta"]):
+        return "next_steps"
+    return None
+
+
+def _reorder_slides(slides: list[dict]) -> list[dict]:
+    if not slides:
+        return slides
+    order = ["problem", "impact", "solution", "proof", "next_steps"]
+    rank = {bucket: idx for idx, bucket in enumerate(order)}
+    classified = [(_classify_slide_bucket(slide), idx, slide) for idx, slide in enumerate(slides)]
+    recognized = sum(1 for bucket, _, _ in classified if bucket in rank)
+    if recognized < 2:
+        return slides
+    classified.sort(key=lambda item: (rank.get(item[0], len(order)), item[1]))
+    return [slide for _, _, slide in classified]
+
+
+def _normalize_text_style(text: str) -> str:
+    out = re.sub(r"\s+", " ", str(text or "").strip())
+    out = out.rstrip(".,;: ")
+    if out:
+        out = out[0].upper() + out[1:]
+    return out
+
+
+def _run_consistency_pass(slides: list[dict]) -> list[dict]:
+    seen_phrases: set[str] = set()
+    for slide in slides:
+        primary, supporting = _extract_primary_supporting(slide)
+        primary = _normalize_text_style(primary)
+        if not primary and supporting:
+            primary = _normalize_text_style(supporting[0])
+        if not primary:
+            primary = "Key point"
+
+        clean_support: list[str] = []
+        local_seen: set[str] = set()
+        for item in supporting:
+            phrase = _normalize_text_style(item)
+            if not phrase:
+                continue
+            k = phrase.lower()
+            if k == primary.lower() or k in local_seen or k in seen_phrases:
+                continue
+            local_seen.add(k)
+            seen_phrases.add(k)
+            clean_support.append(phrase)
+
+        if not clean_support:
+            clean_support = [f"{primary} context"]
+
+        slide["primary_element"] = primary
+        slide["supporting_elements"] = clean_support
+    return slides
+
+
+def _derive_slide_role(slide: dict, idx: int, total: int) -> str:
+    bucket = _classify_slide_bucket(slide)
+    if idx == 0 and bucket is None:
+        return "intro"
+    if bucket == "problem":
+        return "problem"
+    if bucket == "solution":
+        return "solution"
+    if bucket in {"impact", "proof"}:
+        return "proof"
+    if bucket == "next_steps" or idx == total - 1:
+        return "closing"
+    return "intro"
+
+
+def _add_linking_and_reasoning(slides: list[dict], context: dict) -> list[dict]:
+    total = len(slides)
+    for i, slide in enumerate(slides):
+        primary = str(slide.get("primary_element", "")).strip() or "this focus"
+        if i == 0:
+            slide["bridge"] = ""
+        else:
+            prev_primary = str(slides[i - 1].get("primary_element", "")).strip() or "the previous point"
+            slide["bridge"] = f"Because {prev_primary}, we now focus on {primary}"
+
+        slide_role = _derive_slide_role(slide, i, total)
+        slide["slide_role"] = slide_role
+        if not str(slide.get("why_this_slide", "")).strip():
+            topic = context.get("topic", "") or "the topic"
+            slide["why_this_slide"] = f"This {slide_role} slide highlights {primary} for {topic}."
+    return slides
+
+
+def _validate_slides_before_render(slides: list[dict]) -> list[dict]:
+    violations: list[str] = []
+    for idx, slide in enumerate(slides, start=1):
+        if not isinstance(slide, dict):
+            violations.append(f"Slide {idx}: invalid slide object")
+            continue
+        primary, supporting = _extract_primary_supporting(slide)
+        title = str(slide.get("title", "")).strip() or primary
+        if not title:
+            violations.append(f"Slide {idx}: missing title")
+            continue
+        if not primary and not supporting:
+            violations.append(f"Slide {idx}: missing content")
+            continue
+
+        slide["title"] = title
+        slide["primary_element"] = primary or title
+        slide["supporting_elements"] = supporting or [f"{title} detail"]
+        slide["content"] = {
+            "title": slide["title"],
+            "primary_element": slide["primary_element"],
+            "supporting_elements": slide["supporting_elements"],
+        }
+
+    if violations:
+        raise ValueError("; ".join(violations))
+    return slides
 
 
 async def run_pipeline(prompt: str, options: dict = {},
@@ -88,6 +324,7 @@ async def run_pipeline(prompt: str, options: dict = {},
         raise PipelineFailure(f"Pipeline failed at {stage}: {error}")
 
     logger.info("[pipeline] Starting for prompt: %s", prompt[:80])
+    context = _extract_context(prompt)
     _emit(EventType.STAGE_UPDATE, "init", "Understanding your prompt…", 3)
 
     # ── Stage 1: Parse prompt signals ─────────────────────────────
@@ -119,6 +356,10 @@ async def run_pipeline(prompt: str, options: dict = {},
     state = build_state(signals, user_schema=user_schema)
     state.user_schema = user_schema or {}
     deck_mode = signals.get("deck_mode", "general")
+    metadata = dict(state.metadata or {})
+    metadata["context"] = context
+    metadata["deck_state"] = _initialize_deck_state(context, state.slide_count)
+    state = state.model_copy(update={"metadata": metadata})
     
     total_slides = state.slide_count
     logger.info(
@@ -215,6 +456,20 @@ async def run_pipeline(prompt: str, options: dict = {},
                 _fail("narrative_validation", str(e))
             state = await run_content_engine(state)
 
+    # ── Deterministic deck-level quality passes (no LLM) ───────────
+    try:
+        ordered_slides = _reorder_slides(list(state.structured_slides or []))
+        consistent_slides = _run_consistency_pass(ordered_slides)
+        linked_slides = _add_linking_and_reasoning(consistent_slides, context)
+        validated_slides = _validate_slides_before_render(linked_slides)
+        updated_meta = dict(state.metadata or {})
+        deck_state = dict(updated_meta.get("deck_state", {}))
+        deck_state["slide_count"] = len(validated_slides)
+        updated_meta["deck_state"] = deck_state
+        state = state.model_copy(update={"structured_slides": validated_slides, "metadata": updated_meta})
+    except Exception as exc:
+        _fail("post_generation_validation", str(exc))
+
     # ── Shared tail (both paths) ──────────────────────────────────
 
     # Speaker notes (1 LLM call for ALL slides)
@@ -238,12 +493,19 @@ async def run_pipeline(prompt: str, options: dict = {},
     for s in (state.structured_slides or []):
         slides.append({
             "slide_id": s.get("slide_id"),
+            "intent": s.get("intent"),
             "primary_element": s.get("primary_element"),
             "supporting_elements": s.get("supporting_elements"),
+            "entities": s.get("entities", []),
             "role": s.get("role"),
             "why_this_slide": s.get("why_this_slide"),
             "why_next_slide": s.get("why_next_slide"),
             "emotional_tone": s.get("emotional_tone"),
+            "bridge": s.get("bridge", ""),
+            "slide_role": s.get("slide_role"),
+            "title": s.get("title"),
+            "content": s.get("content"),
+            "type": s.get("type"),
         })
     theme = getattr(state, "theme", "modern")
     all_html_slides = []
