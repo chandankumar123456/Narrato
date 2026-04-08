@@ -6,9 +6,6 @@ from pipeline.narrative_engine import (
     _has_high_impact_slide,
     _inject_high_impact_slide,
     validate_narrative_arc,
-    TRANSITION_REPAIR_TEXT,
-    CAUSE_REPAIR_TEXT,
-    NEXT_TRIGGER_REPAIR_TEXT,
 )
 from pipeline.state_builder import build_state
 
@@ -68,7 +65,7 @@ def test_investor_controls_inject_high_impact_slide():
     assert any(s.get("importance") == "high" for s in injected)
 
 
-def test_validate_narrative_arc_repairs_weak_fields_without_failure():
+def test_validate_narrative_arc_keeps_weak_fields_for_validator_rejection():
     slides = [
         {
             "intent": "context",
@@ -96,24 +93,33 @@ def test_validate_narrative_arc_repairs_weak_fields_without_failure():
         },
     ]
 
-    repaired = validate_narrative_arc(slides, target_count=2)
-    assert len(repaired) == 2
-    assert repaired[0]["importance"] == "low"
-    assert repaired[1]["importance"] == "high"
-    assert repaired[1]["transition_reason"] == TRANSITION_REPAIR_TEXT
-    assert repaired[1]["cause"] == CAUSE_REPAIR_TEXT
-    assert repaired[1]["next_trigger"] == NEXT_TRIGGER_REPAIR_TEXT
+    normalized = validate_narrative_arc(slides, target_count=2)
+    assert len(normalized) == 2
+    assert normalized[0]["importance"] == "low"
+    assert normalized[1]["importance"] == "high"
+    assert normalized[1]["transition_reason"] == "next step"
+    assert normalized[1]["cause"] == ""
+    assert normalized[1]["next_trigger"] == ""
+    assert normalized[1]["cause_from_previous"] == ""
+    assert normalized[1]["forward_tension"] == ""
+    assert normalized[1]["narrative_delta"] == ""
+    assert isinstance(normalized[1]["tension_level"], int)
 
 
-def test_validate_narrative_arc_fills_required_keys_softly():
-    repaired = validate_narrative_arc([{"key_message": "Only one field"}], target_count=1)
-    slide = repaired[0]
+def test_validate_narrative_arc_fills_required_keys_with_empty_values():
+    normalized = validate_narrative_arc([{"key_message": "Only one field"}], target_count=1)
+    slide = normalized[0]
     for key in {
         "intent",
         "role_in_story",
+        "slide_role",
         "key_message",
         "transition_reason",
         "emotional_tone",
+        "cause_from_previous",
+        "narrative_delta",
+        "forward_tension",
+        "tension_level",
         "cause",
         "tension",
         "resolution",

@@ -1,5 +1,6 @@
 import logging
 import json
+import re
 from models.presentation_state import PresentationState
 from services.llm_client import call_llm_json
 
@@ -10,6 +11,9 @@ class NarrativeEngineError(Exception):
 
 NARRATIVE_ROLES = [
     "Context", "Problem", "Tension", "Insight", "Solution", "Impact", "Closure"
+]
+CAUSAL_SLIDE_ROLES = [
+    "Problem", "Consequence", "Escalation", "BreakingPoint", "Solution", "Proof", "Scale", "Ask"
 ]
 
 HIGH_IMPORTANCE_SIGNALS = (
@@ -28,14 +32,14 @@ WEAK_TRANSITION_PHRASES = (
     "leads to next",
     "then we see",
 )
-TRANSITION_REPAIR_TEXT = (
-    "Because the previous limitation creates unresolved pressure, this step becomes necessary."
-)
-CAUSE_REPAIR_TEXT = (
-    "This follows directly from the gap introduced in the previous step."
-)
-NEXT_TRIGGER_REPAIR_TEXT = (
-    "This creates a new constraint that must be addressed immediately."
+GENERIC_CAUSAL_PHRASES = (
+    "follows logically",
+    "next step",
+    "leads to",
+    "this creates need",
+    "logical continuation",
+    "from previous",
+    "continues logic",
 )
 
 NARRATIVE_ENGINE_SYSTEM_PROMPT = """You are a world-class Narrative Architect specializing in high-impact presentations.
@@ -77,6 +81,9 @@ You must design EXACTLY {{slide_count}} slides.
 You must strictly follow this narrative progression:
 Context → Problem → Tension → Insight → Solution → Impact → Closure
 
+AND enforce this slide_role progression:
+Problem → Consequence → Escalation → BreakingPoint → Solution → Proof → Scale → Ask
+
 You may expand phases across multiple slides, but ORDER MUST NEVER BREAK.
 
 Every narrative MUST include:
@@ -101,6 +108,11 @@ OUTPUT FORMAT (STRICT JSON ONLY):
       "key_message": "...",
       "transition_reason": "...",
       "emotional_tone": "...",
+      "slide_role": "...",
+      "cause_from_previous": "...",
+      "narrative_delta": "...",
+      "forward_tension": "...",
+      "tension_level": 0,
       "cause": "...",
       "tension": "...",
       "resolution": "...",
@@ -165,6 +177,9 @@ FORBIDDEN:
 8. ROLE CONSISTENCY  
 Each slide must clearly belong to one of:
 Context, Problem, Tension, Insight, Solution, Impact, Closure
+
+AND must include one slide_role from:
+Problem, Consequence, Escalation, BreakingPoint, Solution, Proof, Scale, Ask
 
 No skipping required phases.
 
@@ -445,7 +460,9 @@ def _is_weak_transition(value: object) -> bool:
         return True
     if len(text.split()) < 5:
         return True
-    return any(phrase in text for phrase in WEAK_TRANSITION_PHRASES)
+    if any(phrase in text for phrase in WEAK_TRANSITION_PHRASES):
+        return True
+    return any(phrase in text for phrase in GENERIC_CAUSAL_PHRASES)
 
 
 def _is_weak_cause(value: object) -> bool:
@@ -454,8 +471,7 @@ def _is_weak_cause(value: object) -> bool:
         return True
     if len(text.split()) < 5:
         return True
-    weak = ("follows previous idea", "continues logic", "step follows")
-    return any(phrase in text for phrase in weak)
+    return any(phrase in text for phrase in GENERIC_CAUSAL_PHRASES)
 
 
 def _is_weak_next_trigger(value: object) -> bool:
@@ -464,8 +480,69 @@ def _is_weak_next_trigger(value: object) -> bool:
         return True
     if len(text.split()) < 5:
         return True
-    weak = ("next step", "leads to next", "then we see")
-    return any(phrase in text for phrase in weak)
+    return any(phrase in text for phrase in GENERIC_CAUSAL_PHRASES)
+
+
+def _extract_tokens(value: object) -> list[str]:
+    return [
+        token for token in re.findall(r"[a-z0-9]+", _safe_text(value).lower())
+        if len(token) >= 4
+    ]
+
+
+def _cause_references_previous_message(cause_text: object, previous_key_message: object) -> bool:
+    prev_tokens = _extract_tokens(previous_key_message)
+    if not prev_tokens:
+        return False
+    cause_tokens = set(_extract_tokens(cause_text))
+    return any(token in cause_tokens for token in prev_tokens)
+
+
+def _find_weak_causal_slide_indices(slides: list[dict]) -> list[int]:
+    invalid: list[int] = []
+    for idx, slide in enumerate(slides or []):
+        cause_text = slide.get("cause_from_previous")
+        delta_text = slide.get("narrative_delta")
+        pressure_text = slide.get("forward_tension")
+        transition_text = slide.get("transition_reason")
+        if (
+            _is_weak_cause(cause_text)
+            or _is_weak_transition(delta_text)
+            or _is_weak_next_trigger(pressure_text)
+            or _is_weak_transition(transition_text)
+        ):
+            invalid.append(idx)
+            continue
+        if idx > 0:
+            previous_key = (slides[idx - 1] or {}).get("key_message")
+            if not _cause_references_previous_message(cause_text, previous_key):
+                invalid.append(idx)
+    return invalid
+
+
+def _normalize_slide_role(role: object, idx: int, target_count: int) -> str:
+    role_text = _safe_text(role)
+    if role_text in CAUSAL_SLIDE_ROLES:
+        return role_text
+    if target_count <= 0:
+        return CAUSAL_SLIDE_ROLES[min(idx, len(CAUSAL_SLIDE_ROLES) - 1)]
+    mapped_idx = min(
+        idx * len(CAUSAL_SLIDE_ROLES) // max(target_count, 1),
+        len(CAUSAL_SLIDE_ROLES) - 1
+    )
+    return CAUSAL_SLIDE_ROLES[mapped_idx]
+
+
+def _default_tension_level(idx: int, target_count: int) -> int:
+    if target_count <= 1:
+        return 5
+    solution_idx = max(1, min(target_count - 1, target_count // 2))
+    if idx <= solution_idx:
+        ramp = int(round((idx / max(solution_idx, 1)) * 9))
+        return max(2, min(9, ramp))
+    tail_span = max(1, target_count - 1 - solution_idx)
+    tail = int(round(((target_count - 1 - idx) / tail_span) * 6))
+    return max(1, min(6, tail))
 
 
 def _normalize_slide_count(slides: list, target_count: int) -> list:
@@ -490,14 +567,19 @@ def _normalize_slide_count(slides: list, target_count: int) -> list:
 
 
 def validate_narrative_arc(slides: list, target_count: int) -> list:
-    """Soft-validate and repair arc structure; never raises for weak content."""
-    repaired_slides = _normalize_slide_count(slides, target_count)
+    """Normalize arc structure only; do not repair weak causal content."""
+    normalized_slides = _normalize_slide_count(slides, target_count)
     required_keys = {
         "intent",
         "role_in_story",
+        "slide_role",
         "key_message",
         "transition_reason",
         "emotional_tone",
+        "cause_from_previous",
+        "narrative_delta",
+        "forward_tension",
+        "tension_level",
         "cause",
         "tension",
         "resolution",
@@ -505,33 +587,35 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
     }
 
     output: list[dict] = []
-    for i, slide in enumerate(repaired_slides):
+    for i, slide in enumerate(normalized_slides):
         if not isinstance(slide, dict):
             slide = {}
 
         role_default = NARRATIVE_ROLES[min(i * len(NARRATIVE_ROLES) // max(target_count, 1), len(NARRATIVE_ROLES) - 1)]
         base = dict(slide)
-        base.setdefault("intent", "general")
+        base.setdefault("intent", "")
         base.setdefault("role_in_story", role_default)
-        base.setdefault("key_message", f"Core point {i + 1}")
-        base.setdefault("emotional_tone", "neutral")
-        base.setdefault("tension", "Pressure accumulates as unresolved constraints persist.")
+        base.setdefault("slide_role", _normalize_slide_role(base.get("slide_role"), i, target_count))
+        base.setdefault("key_message", "")
+        base.setdefault("emotional_tone", "")
+        base.setdefault("tension", "")
         base.setdefault("resolution", "")
+        base.setdefault("cause_from_previous", "")
+        base.setdefault("narrative_delta", "")
+        base.setdefault("forward_tension", "")
+        base.setdefault("tension_level", _default_tension_level(i, target_count))
 
-        if i == 0:
-            if not _safe_text(base.get("transition_reason")):
-                base["transition_reason"] = "This establishes the opening context for the narrative."
-            if not _safe_text(base.get("cause")):
-                base["cause"] = "This introduces the initial condition that frames the narrative."
-            if _is_weak_next_trigger(base.get("next_trigger")):
-                base["next_trigger"] = NEXT_TRIGGER_REPAIR_TEXT
-        else:
-            if _is_weak_transition(base.get("transition_reason")):
-                base["transition_reason"] = TRANSITION_REPAIR_TEXT
-            if _is_weak_cause(base.get("cause")):
-                base["cause"] = CAUSE_REPAIR_TEXT
-            if _is_weak_next_trigger(base.get("next_trigger")):
-                base["next_trigger"] = NEXT_TRIGGER_REPAIR_TEXT
+        base["role_in_story"] = _safe_text(base.get("role_in_story")) or role_default
+        base["slide_role"] = _normalize_slide_role(base.get("slide_role"), i, target_count)
+
+        try:
+            base["tension_level"] = max(0, min(10, int(base.get("tension_level"))))
+        except Exception:
+            base["tension_level"] = _default_tension_level(i, target_count)
+
+        base["cause"] = _safe_text(base.get("cause_from_previous"))
+        base["next_trigger"] = _safe_text(base.get("forward_tension"))
+        base["tension"] = _safe_text(base.get("tension")) or _safe_text(base.get("forward_tension"))
 
         # Ensure all required keys exist and are non-empty (except resolution allowed empty)
         for key in required_keys:
@@ -539,22 +623,14 @@ def validate_narrative_arc(slides: list, target_count: int) -> list:
                 base.setdefault(key, "")
                 continue
             if key not in base or not _safe_text(base.get(key)):
-                if key == "transition_reason":
-                    base[key] = TRANSITION_REPAIR_TEXT if i > 0 else "This establishes the opening context for the narrative."
-                elif key == "cause":
-                    base[key] = CAUSE_REPAIR_TEXT if i > 0 else "This introduces the initial condition that frames the narrative."
-                elif key == "next_trigger":
-                    base[key] = NEXT_TRIGGER_REPAIR_TEXT
-                elif key == "key_message":
-                    base[key] = f"Core point {i + 1}"
+                if key == "tension_level":
+                    base[key] = _default_tension_level(i, target_count)
                 elif key == "role_in_story":
                     base[key] = role_default
-                elif key == "intent":
-                    base[key] = "general"
-                elif key == "emotional_tone":
-                    base[key] = "neutral"
-                elif key == "tension":
-                    base[key] = "Pressure accumulates as unresolved constraints persist."
+                elif key == "slide_role":
+                    base[key] = _normalize_slide_role(base.get("slide_role"), i, target_count)
+                else:
+                    base[key] = ""
 
         output.append(base)
 
@@ -622,6 +698,65 @@ def _apply_investor_importance_weighting(slides: list[dict]) -> list[dict]:
     for slide in slides:
         weighted.append({**slide, "importance": _score_slide_importance(slide)})
     return weighted
+
+
+async def regenerate_invalid_narrative_slides(
+    state: PresentationState,
+    narrative_arc: list[dict],
+    invalid_indices: list[int],
+    business_context: dict | None = None,
+) -> list[dict]:
+    """Regenerate only invalid narrative slides once, preserving healthy slides."""
+    if not invalid_indices:
+        return narrative_arc
+
+    arc_json = json.dumps(narrative_arc, indent=2)
+    one_based = [idx + 1 for idx in invalid_indices]
+    system_prompt = (
+        "You rewrite only invalid slides in a narrative arc. "
+        "Return strict JSON with key 'slides' as an array of objects: "
+        "{slide_index, intent, role_in_story, key_message, transition_reason, emotional_tone, "
+        "slide_role, cause_from_previous, narrative_delta, forward_tension, tension_level}. "
+        "Each rewritten slide must avoid generic phrases and must be causally specific."
+    )
+    user_prompt = f"""
+Topic: {state.topic}
+Audience: {state.audience}
+Tone: {state.tone}
+Invalid slide indices (1-based): {one_based}
+
+Current arc:
+{arc_json}
+
+Rules:
+- Rewrite ONLY the invalid slides.
+- cause_from_previous must reference previous slide key_message terms.
+- narrative_delta and forward_tension must be specific and non-generic.
+- transition_reason must be specific and non-generic.
+- Do not add placeholders like "follows logically", "next step", "leads to", "this creates need".
+
+Return JSON only.
+"""
+    try:
+        result = await call_llm_json(system_prompt, user_prompt)
+        rewrites = result.get("slides", [])
+        updated_arc = [dict(s) if isinstance(s, dict) else {} for s in (narrative_arc or [])]
+        rewrite_by_index = {}
+        for item in rewrites:
+            try:
+                idx = int(item.get("slide_index")) - 1
+            except Exception:
+                continue
+            if idx in invalid_indices:
+                rewrite_by_index[idx] = dict(item)
+        for idx in invalid_indices:
+            patch = rewrite_by_index.get(idx, {})
+            if patch:
+                updated_arc[idx] = {**updated_arc[idx], **patch}
+        return updated_arc
+    except Exception as exc:
+        logger.warning("[narrative_engine] Failed to regenerate invalid slides: %s", exc)
+        return narrative_arc
 
 
 async def run_narrative_engine(state: PresentationState, business_context: dict = None) -> PresentationState:
@@ -805,7 +940,7 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
         * Ensure progression is logical and smooth
     """
 
-    max_retries = 1
+    max_retries = 2
     for attempt in range(max_retries):
         try:
             result = await call_llm_json(system_prompt, user_prompt)
@@ -822,11 +957,18 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
                 slides = slides[:state.slide_count]
 
             valid_slides = validate_narrative_arc(slides, state.slide_count)
+            weak_indices = _find_weak_causal_slide_indices(valid_slides)
+            if weak_indices and attempt < max_retries - 1:
+                logger.warning(
+                    "[narrative_engine] Weak causal fields in slides %s, regenerating full narrative once",
+                    ",".join(str(i + 1) for i in weak_indices),
+                )
+                continue
             
             # Map valid slides to the state
             for slide in valid_slides:
-                slide["why_this_slide"] = slide.get("cause", "")
-                slide["why_next_slide"] = slide.get("next_trigger", "")
+                slide["why_this_slide"] = slide.get("cause_from_previous", "")
+                slide["why_next_slide"] = slide.get("forward_tension", "")
             from pipeline.investor_enforcer import enforce_investor_structure
 
             # 🔥 enforce investor completeness + emphasis controls
@@ -849,17 +991,22 @@ async def run_narrative_engine(state: PresentationState, business_context: dict 
     for i in range(state.slide_count):
         role_idx = min(i * len(NARRATIVE_ROLES) // state.slide_count, len(NARRATIVE_ROLES) - 1)
         fallback_arc.append({
-            "intent": "general",
+            "intent": "",
             "role_in_story": NARRATIVE_ROLES[role_idx],
             "key_message": f"Core point {i+1} for {state.topic}",
-            "transition_reason": "This creates need for next step" if i > 0 else "Start",
-            "emotional_tone": "neutral",
+            "transition_reason": "",
+            "emotional_tone": "",
             
-            "cause": f"This step follows previous idea",
-            "tension": f"Increasing importance of step {i+1}",
+            "slide_role": _normalize_slide_role("", i, state.slide_count),
+            "cause_from_previous": "",
+            "narrative_delta": "",
+            "forward_tension": "",
+            "tension_level": _default_tension_level(i, state.slide_count),
+            "cause": "",
+            "tension": "",
             "resolution": "",
-            "next_trigger": f"This creates need for step {i+2}",
-            "why_this_slide": f"This step continues logic",
-            "why_next_slide": "This creates need for next step"
+            "next_trigger": "",
+            "why_this_slide": "",
+            "why_next_slide": ""
         })
     return state.model_copy(update={"narrative_arc": fallback_arc})

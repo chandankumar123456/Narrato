@@ -52,15 +52,21 @@ async def run_content_engine(state: PresentationState) -> PresentationState:
         logger.warning("[content_engine] No narrative_arc found — generating from slide_plan")
 
         state.narrative_arc = []
-        for slide in (state.slide_plan or []):
+        causal_roles = ["Problem", "Consequence", "Escalation", "BreakingPoint", "Solution", "Proof", "Scale", "Ask"]
+        for i, slide in enumerate(state.slide_plan or []):
             state.narrative_arc.append({
     "intent": slide.get("purpose", ""),
     "role_in_story": slide.get("section", "Context"),
+    "slide_role": causal_roles[min(i, len(causal_roles) - 1)],
     "key_message": slide.get("purpose", ""),
-    "cause": f"Follows logically from previous slide intent",
-    "tension": f"Expands the narrative progression",
+    "cause_from_previous": "",
+    "narrative_delta": "",
+    "forward_tension": "",
+    "tension_level": 5,
+    "cause": "",
+    "tension": "",
     "resolution": "",
-    "next_trigger": "Leads to next structured step",
+    "next_trigger": "",
     "emotional_tone": "neutral"
 })
 
@@ -121,14 +127,20 @@ Return structured_slides with same length.
             behavior = extract_role_behavior(role)
             original_intent = arc_slide.get("intent", "")
             emotional_tone = arc_slide.get("emotional_tone", "neutral")
+            slide_role = arc_slide.get("slide_role", role)
 
             slide["intent"] = original_intent
             slide["role_in_story"] = role
+            slide["slide_role"] = slide_role
             slide["emotional_tone"] = emotional_tone
             slide["type"] = "content_slide"
             slide["slide_id"] = i + 1
-            slide["why_this_slide"] = arc_slide.get("cause", "")
-            slide["why_next_slide"] = arc_slide.get("next_trigger", "")
+            slide["why_this_slide"] = arc_slide.get("cause_from_previous", "")
+            slide["why_next_slide"] = arc_slide.get("forward_tension", "")
+            slide["cause_from_previous"] = arc_slide.get("cause_from_previous", "")
+            slide["narrative_delta"] = arc_slide.get("narrative_delta", "")
+            slide["forward_tension"] = arc_slide.get("forward_tension", "")
+            slide["tension_level"] = arc_slide.get("tension_level", 0)
             slide["tension"] = arc_slide.get("tension", "")
             slide["resolution"] = arc_slide.get("resolution", "")
             
