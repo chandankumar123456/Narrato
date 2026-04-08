@@ -28,6 +28,7 @@ def test_validate_narrative_arc_repairs_required_causal_fields():
         assert slide.get("narrative_delta")
         assert slide.get("forward_tension")
         assert isinstance(slide.get("tension_level"), int)
+        assert 0 <= slide.get("tension_level") <= 10
         assert slide.get("slide_role")
 
 
@@ -40,6 +41,7 @@ def test_validate_narrative_arc_enforces_tension_curve():
     ]
 
     repaired = validate_narrative_arc(arc)
+    assert repaired[0]["narrative_delta"] != "d"
     assert repaired[1]["tension_level"] >= repaired[0]["tension_level"]
     assert repaired[2]["tension_level"] >= repaired[1]["tension_level"]
     assert repaired[3]["tension_level"] <= repaired[2]["tension_level"]

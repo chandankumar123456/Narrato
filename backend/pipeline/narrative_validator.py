@@ -12,7 +12,7 @@ SLIDE_ROLE_SEQUENCE = [
     "Scale",
     "Ask",
 ]
-_ROLE_RANK = {role: idx for idx, role in enumerate(SLIDE_ROLE_SEQUENCE)}
+_SLIDE_ROLE_RANK = {role: idx for idx, role in enumerate(SLIDE_ROLE_SEQUENCE)}
 _WEAK_PHRASES = {
     "derived",
     "basic",
@@ -22,6 +22,9 @@ _WEAK_PHRASES = {
     "leads to next",
     "then we see",
 }
+DEFAULT_FIRST_SLIDE_CAUSE = "This opens with the central investor problem and sets the baseline pressure."
+DEFAULT_NARRATIVE_DELTA = "This slide changes the narrative by adding a new consequence."
+DEFAULT_FORWARD_TENSION = "This creates unresolved pressure that forces the next slide."
 
 
 def _txt(value) -> str:
@@ -56,7 +59,8 @@ def _default_tension(idx: int, total: int) -> int:
     if idx <= solution_idx:
         return max(2, min(9, int(round((idx / max(solution_idx, 1)) * 9))))
     remaining = max(1, total - 1 - solution_idx)
-    return max(1, min(6, int(round(((total - 1 - idx) / remaining) * 6))))
+    numerator = max(0, total - 1 - idx)
+    return max(1, min(6, int(round((numerator / remaining) * 6))))
 
 
 def _repair_slide(slide: dict, idx: int, total: int, previous_slide: dict | None) -> dict:
@@ -72,17 +76,17 @@ def _repair_slide(slide: dict, idx: int, total: int, previous_slide: dict | None
 
     if idx == 0:
         if _is_weak(repaired.get("cause_from_previous")):
-            repaired["cause_from_previous"] = "This opens with the central investor problem and sets the baseline pressure."
+            repaired["cause_from_previous"] = DEFAULT_FIRST_SLIDE_CAUSE
     else:
         prev_msg = _txt((previous_slide or {}).get("key_message")) or "the previous unresolved gap"
         if _is_weak(repaired.get("cause_from_previous")):
             repaired["cause_from_previous"] = f"Because {prev_msg}, this slide is required to advance the argument."
 
-    if not _txt(repaired.get("narrative_delta")):
-        repaired["narrative_delta"] = "This slide changes the narrative by adding a new consequence."
+    if _is_weak(repaired.get("narrative_delta")):
+        repaired["narrative_delta"] = DEFAULT_NARRATIVE_DELTA
 
     if _is_weak(repaired.get("forward_tension")):
-        repaired["forward_tension"] = "This creates unresolved pressure that forces the next slide."
+        repaired["forward_tension"] = DEFAULT_FORWARD_TENSION
 
     if _is_weak(repaired.get("transition_reason")):
         repaired["transition_reason"] = "This follows because the previous claim creates unresolved investor pressure."
@@ -133,14 +137,14 @@ def validate_narrative_arc(narrative_arc):
         required_failures = []
         if not _txt(slide.get("cause_from_previous")) and not _txt(slide.get("cause")):
             required_failures.append("missing cause")
-        if not _txt(slide.get("narrative_delta")):
+        if _is_weak(slide.get("narrative_delta")):
             required_failures.append("no narrative change")
         if _is_weak(slide.get("transition_reason")) or _is_weak(slide.get("forward_tension") or slide.get("next_trigger")):
             required_failures.append("weak transition")
 
         role = _txt(slide.get("slide_role")) or _txt(slide.get("role_in_story"))
-        role = role if role in _ROLE_RANK else _default_role(i, total)
-        role_rank = _ROLE_RANK[role]
+        role = role if role in _SLIDE_ROLE_RANK else _default_role(i, total)
+        role_rank = _SLIDE_ROLE_RANK.get(role, _SLIDE_ROLE_RANK[_default_role(i, total)])
         if role_rank < last_rank:
             required_failures.append("slide_role regression")
         last_rank = max(last_rank, role_rank)
