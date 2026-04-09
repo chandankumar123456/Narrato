@@ -3,9 +3,10 @@ import asyncio
 from pathlib import Path
 import html
 from services.llm_client import call_llm_json
-from pipeline.visual_narrative_control import compute_visual_plan, format_visual_plan_for_renderer
+from pipeline.visual_narrative_control import compute_visual_plan
 from pipeline.narrative_transform import transform_narrative
 from pipeline.content_integrity import verify_narrative_to_preprocess, verify_preprocess_to_render
+from pipeline.slide_utils import compose_slide_markup
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,32 @@ _HTML_WRAPPER = """\
 
 def _esc(text: str) -> str:
     return html.escape(str(text)) if text else ""
+
+BOLD_GRADIENT_HINTS = ("pink", "magenta", "purple", "violet", "gradient")
+INTEGRITY_PREFIXES = ("TITLE:", "PRIMARY:")
+
+
+def _resolve_theme_token(theme_dict: dict) -> str:
+    background = str(theme_dict.get("background", "")).lower()
+    primary_color = str(theme_dict.get("primary_color", "")).lower()
+    if "light" in background:
+        return "minimal_light"
+    if any(k in primary_color for k in BOLD_GRADIENT_HINTS):
+        return "bold_gradient"
+    return "dark_modern"
+
+
+def _strip_integrity_prefixes(text: str) -> str:
+    cleaned = (text or "").strip()
+    while True:
+        matched = False
+        for prefix in INTEGRITY_PREFIXES:
+            if cleaned.startswith(prefix):
+                cleaned = cleaned.replace(prefix, "", 1).strip()
+                matched = True
+                break
+        if not matched:
+            return cleaned
 
 THEME_GENERATION_PROMPT = """You are a Visual System Architect. Generate a strictly consistent theme structure for the entire presentation.
 
@@ -377,64 +404,38 @@ Content:
         preprocessing_result=preprocessing_result,
         layout_history=layout_history,
     )
-    visual_plan_block = format_visual_plan_for_renderer(visual_plan)
+    archetype_variant_history = continuity_context.setdefault("archetype_variant_history", {})
+    visual_plan = {
+        **visual_plan,
+        "recent_archetype_variants": archetype_variant_history,
+    }
     logger.info("Slide %d: Visual plan → role=%s layout=%s density=%s",
                 slide_index + 1, visual_plan['narrative_role'],
                 visual_plan['layout'], visual_plan['density'])
 
-    # Phase 2 & 3: Generation & Validation Loop
-    html_content = ""
-    css_content = ""
-    max_retries = 3
-    
-    render_input = f"Slide {slide_index + 1}:\nDistilled Content:\n{preprocessing_result}\nTheme: {theme_dict}\nEmotional Tone: {emotional_tone}{visual_plan_block}"
-    validation_feedback = ""
-    
-    for attempt in range(max_retries):
-        current_render_prompt = render_input
-        if validation_feedback:
-            current_render_prompt += f"\n\nPREVIOUS ATTEMPT FAILED. FEEDBACK TO FIX:\n{validation_feedback}"
-            
-        try:
-            render_result = await call_llm_json(RENDER_PROMPT, current_render_prompt)
-            if not isinstance(render_result, dict):
-                raise ValueError("Render output not JSON dict.")
-            html_content = render_result.get("html", "")
-            css_content = render_result.get("css", "")
-        except Exception as e:
-            logger.error(f"Slide {slide_index + 1}: RENDER attempt {attempt + 1} failed: {e}")
-            continue
-            
-        # Validate
-        validation_input = f"Generated HTML:\n{html_content}\n\nGenerated CSS:\n{css_content}\nTheme Context: {theme_dict}\nStructured Content:\n{preprocessing_result}{visual_plan_block}"
-        try:
-            validation_result = await call_llm_json(VALIDATE_PROMPT, validation_input)
-            if not isinstance(validation_result, dict):
-                continue
-            
-            # Check constraints
-            dom = validation_result.get("dominant_element_present", False)
-            all_sups = validation_result.get("all_supporting_elements_present", False)
-            layout_ok = validation_result.get("layout_follows_plan", False)
-            ws = validation_result.get("whitespace_present", False)
-            thesis_pres = validation_result.get("thesis_preserved", False)
-            theme_consistent = validation_result.get("theme_consistent", False)
-            
-            if dom and all_sups and layout_ok and ws and thesis_pres and theme_consistent:
-                logger.info(f"Slide {slide_index + 1}: Layout passed validation on attempt {attempt + 1}")
-                break
-            else:
-                validation_feedback = validation_result.get("critique", "Layout failed structural checks.")
-                logger.info(f"Slide {slide_index + 1}: Validation failed on attempt {attempt + 1}. Feedback: {validation_feedback}")
-        except Exception as e:
-            logger.warning(f"Slide {slide_index + 1}: Validation call failed: {e}.")
-            if "HARD FAILURE" in str(e):
-                raise e # Propagate hard failures
-            continue
-    else:
-        # Loop exhausted without breaking
-        logger.error(f"Slide {slide_index + 1}: HARD FAILURE validation retries exhausted. Rejecting slide generation.")
-        # raise RuntimeError("HARD FAILURE: Slide failed validation after retries")
+    # Phase 2: Deterministic layout composition from structured content
+    render_result = compose_slide_markup(
+        preprocessing_result=preprocessing_result,
+        visual_plan=visual_plan,
+        slide_index=slide_index,
+        total_slides=total_slides,
+    )
+    html_content = render_result.get("html", "")
+    css_content = render_result.get("css", "")
+    logger.info(
+        "Slide %d: Deterministic composition applied (archetype=%s, variant=%s, layout=%s)",
+        slide_index + 1,
+        render_result.get("archetype", "content"),
+        render_result.get("variant", "default"),
+        visual_plan.get("layout", "center_focus"),
+    )
+    rendered_archetype = str(render_result.get("archetype", "")).strip()
+    rendered_variant = str(render_result.get("variant", "")).strip()
+    if rendered_archetype and rendered_variant:
+        recent_variants = archetype_variant_history.setdefault(rendered_archetype, [])
+        if isinstance(recent_variants, list):
+            recent_variants.append(rendered_variant)
+            archetype_variant_history[rendered_archetype] = recent_variants[-3:]
 
     # ── INTEGRITY CHECKPOINT 2: Preprocess → Render Alignment ────────
     # Verify ALL structured content appears in rendered HTML.
@@ -451,59 +452,43 @@ Content:
             "Slide %d: INTEGRITY FAIL (preprocess→render) — missing=%s fix=%s",
             slide_index + 1, missing, fix_dir,
         )
-        # Attempt ONE targeted re-render with enforcement directive
-        enforcement_prompt = (
-            render_input +
-            f"\n\nCONTENT INTEGRITY ENFORCEMENT — YOUR PREVIOUS RENDER IS MISSING CONTENT.\n"
-            f"MISSING ELEMENTS THAT MUST APPEAR VERBATIM IN HTML:\n"
-        )
-        for elem in missing:
-            enforcement_prompt += f"  - \"{elem}\"\n"
-        enforcement_prompt += (
-            f"\nFIX DIRECTIVE: {fix_dir}\n"
-            f"You MUST preserve the meaning of all elements.\n"
-            f"You may slightly rephrase for visual clarity.\n"
-            f"Do NOT omit any idea or add unrelated content."
-        )
-        try:
-            fix_render = await call_llm_json(RENDER_PROMPT, enforcement_prompt)
-            if isinstance(fix_render, dict):
-                fixed_html = fix_render.get("html", "")
-                fixed_css = fix_render.get("css", "")
-                # Verify the fix actually worked
-                still_missing = []
-                for elem in missing:
-                    if isinstance(elem, str):
-                        elem_text = elem.strip()
-                        
-                        # allow partial + semantic match
-                        if elem_text not in fixed_html:
-                            if len(elem_text) > 30 and elem_text[:30] not in fixed_html:
-                                still_missing.append(elem)
-                if not still_missing:
-                    html_content = fixed_html
-                    css_content = fixed_css
-                    logger.info("Slide %d: INTEGRITY render fix applied — all elements now present", slide_index + 1)
-                else:
-                    logger.warning(
-                        "Slide %d: INTEGRITY render fix incomplete — still missing: %s. Using original render.",
-                        slide_index + 1, still_missing,
-                    )
-        except Exception as fix_err:
-            logger.warning("Slide %d: INTEGRITY render fix failed: %s", slide_index + 1, fix_err)
+        # Deterministic integrity repair by explicitly appending missing text blocks.
+        if missing:
+            repaired_blocks = []
+            for elem in missing:
+                if not isinstance(elem, str):
+                    continue
+                raw = elem.strip()
+                has_integrity_prefix = raw.startswith(INTEGRITY_PREFIXES)
+                txt = _strip_integrity_prefixes(raw)
+                if txt:
+                    if has_integrity_prefix:
+                        repaired_blocks.append(f'<h3 class="card-headline">{_esc(txt)}</h3>')
+                    else:
+                        repaired_blocks.append(f'<p class="slide-body">{_esc(txt)}</p>')
+            if repaired_blocks:
+                html_content += (
+                    '<section class="layout-grid">'
+                    '<div class="card card--support">'
+                    '<h3 class="card-headline">Additional context</h3>'
+                    f'{"".join(repaired_blocks)}'
+                    "</div></section>"
+                )
+                logger.info("Slide %d: INTEGRITY deterministic repair appended %d elements", slide_index + 1, len(repaired_blocks))
 
     custom_style = f"<style>{css_content}</style>" if css_content else ""
+    resolved_theme = _resolve_theme_token(theme_dict)
 
     final_html = _HTML_WRAPPER.format(
         slides_css=_load_slides_css(),
-        theme=_esc(theme_dict.get('background', 'dark')),
+        theme=_esc(resolved_theme),
         custom_style=custom_style,
         inner_html=html_content
     )
     
     design_spec = {
         "slide_index": slide_index,
-        "theme": theme_dict.get('background', 'dark'),
+        "theme": resolved_theme,
         "layout": visual_plan.get("layout", "center_focus"),
         "components": {
             "type": preprocessing_result.get("intent", "content"),
