@@ -48,6 +48,18 @@ def _resolve_theme_token(theme_dict: dict) -> str:
         return "bold_gradient"
     return "dark_modern"
 
+
+def _strip_integrity_prefixes(text: str) -> str:
+    cleaned = (text or "").strip()
+    changed = True
+    while changed:
+        changed = False
+        for prefix in ("TITLE:", "PRIMARY:"):
+            if cleaned.startswith(prefix):
+                cleaned = cleaned.replace(prefix, "", 1).strip()
+                changed = True
+    return cleaned
+
 THEME_GENERATION_PROMPT = """You are a Visual System Architect. Generate a strictly consistent theme structure for the entire presentation.
 
 Return a JSON object with EXACTLY these keys:
@@ -429,13 +441,14 @@ Content:
             for elem in missing:
                 if not isinstance(elem, str):
                     continue
-                txt = elem.strip()
-                if txt.startswith("TITLE:"):
-                    txt = txt.replace("TITLE:", "", 1).strip()
-                if txt.startswith("PRIMARY:"):
-                    txt = txt.replace("PRIMARY:", "", 1).strip()
+                raw = elem.strip()
+                is_heading = raw.startswith(("TITLE:", "PRIMARY:"))
+                txt = _strip_integrity_prefixes(raw)
                 if txt:
-                    repaired_blocks.append(f'<p class="slide-body">{_esc(txt)}</p>')
+                    if is_heading:
+                        repaired_blocks.append(f'<h3 class="card-headline">{_esc(txt)}</h3>')
+                    else:
+                        repaired_blocks.append(f'<p class="slide-body">{_esc(txt)}</p>')
             if repaired_blocks:
                 html_content += (
                     '<section class="layout-grid">'

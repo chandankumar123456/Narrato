@@ -119,6 +119,8 @@ def _parse_metric(text: str) -> tuple[str, str, str]:
     raw = (text or "").strip()
     if not raw:
         return "", "", ""
+    # Pattern parts:
+    # \$? optional currency symbol, \d[\d,.]*(?:\.\d+)? numeric core, optional unit suffix.
     match = re.search(r"(\$?\d[\d,.]*(?:\.\d+)?\s?(?:%|x|X|k|K|m|M|b|B|mo|yr|yrs|years?)?)", raw)
     if not match:
         return "", raw, ""
@@ -198,6 +200,7 @@ def _render_problem(title: str, primary: str, supporting: list[str]) -> str:
     value, label, _ = _parse_metric(primary)
     stat_value = value or "Problem"
     stat_label = label or primary
+    stat_context = supporting[1] if len(supporting) > 1 else (supporting[0] if supporting else primary)
     cards = "".join(
         '<article class="card card--problem-pillar">'
         f'<h3 class="card-headline">Issue {idx + 1}</h3>'
@@ -214,7 +217,7 @@ def _render_problem(title: str, primary: str, supporting: list[str]) -> str:
         '<div class="problem-stat-row">'
         f'<span class="problem-stat-value">{_esc(stat_value)}</span>'
         f'<span class="problem-stat-label">{_esc(stat_label)}</span>'
-        f'<span class="problem-stat-context">{_esc(primary)}</span>'
+        f'<span class="problem-stat-context">{_esc(stat_context)}</span>'
         "</div>"
         f'<p class="grid-intro-paragraph">{_esc(primary)}</p>'
         f'<div class="grid-cards grid-cards--problem-pillars">{cards}</div>'
@@ -309,7 +312,7 @@ def _render_blocks(title: str, primary: str, supporting: list[str], bento: bool)
             '<article class="card card--focal card--bento-hero">'
             '<div class="accent-bar"></div>'
             f'<h3 class="card-headline">{_esc(primary)}</h3>'
-            f'<p class="card-support">{_esc(primary)}</p>'
+            f'<p class="card-support">{_esc(supporting[1]) if len(supporting) > 1 else (_esc(supporting[0]) if supporting else _esc(title))}</p>'
             f'</article><div class="bento-stack">{stack}</div></div></section>'
         )
 
@@ -329,7 +332,7 @@ def _render_blocks(title: str, primary: str, supporting: list[str], bento: bool)
         '<article class="card card--focal">'
         '<div class="accent-bar"></div>'
         f'<h3 class="card-headline">{_esc(primary)}</h3>'
-        f'<p class="card-support">{_esc(primary)}</p>'
+        f'<p class="card-support">{_esc(supporting[1]) if len(supporting) > 1 else (_esc(supporting[0]) if supporting else _esc(title))}</p>'
         f'</article>{support_cards}</div></section>'
     )
 
@@ -347,7 +350,7 @@ def _render_business(title: str, primary: str, supporting: list[str]) -> str:
         '<div class="accent-bar accent-bar--side"></div>'
         f'<h2 class="slide-title-section">{_esc(title)}</h2>'
         f'<p class="split-body-lead">{_esc(primary)}</p>'
-        f'<p class="split-body-support">{_esc(primary)}</p>'
+        f'<p class="split-body-support">{_esc(supporting[0]) if supporting else _esc(title)}</p>'
         "</div>"
         '<div class="split-right split-right--secondary">'
         '<div class="split-visual"><div class="split-visual-inner">'
@@ -381,7 +384,8 @@ def compose_slide_markup(
     role = str(visual_plan.get("narrative_role", ""))
 
     archetype = _infer_archetype(intent, role, slide_index, total_slides)
-    rhythm = "dense" if visual_plan.get("density") == "high" else ("airy" if visual_plan.get("density") == "minimal" else "standard")
+    density = visual_plan.get("density")
+    rhythm = {"high": "dense", "minimal": "airy"}.get(density, "standard")
     frame_attrs = {
         "data-rhythm": rhythm,
         "data-slide-intent": archetype,
