@@ -414,9 +414,10 @@ Content:
     html_content = render_result.get("html", "")
     css_content = render_result.get("css", "")
     logger.info(
-        "Slide %d: Deterministic composition applied (archetype=%s, layout=%s)",
+        "Slide %d: Deterministic composition applied (archetype=%s, variant=%s, layout=%s)",
         slide_index + 1,
         render_result.get("archetype", "content"),
+        render_result.get("variant", "default"),
         visual_plan.get("layout", "center_focus"),
     )
 
