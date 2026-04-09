@@ -404,6 +404,11 @@ Content:
         preprocessing_result=preprocessing_result,
         layout_history=layout_history,
     )
+    archetype_variant_history = continuity_context.setdefault("archetype_variant_history", {})
+    visual_plan = {
+        **visual_plan,
+        "recent_archetype_variants": archetype_variant_history,
+    }
     logger.info("Slide %d: Visual plan → role=%s layout=%s density=%s",
                 slide_index + 1, visual_plan['narrative_role'],
                 visual_plan['layout'], visual_plan['density'])
@@ -424,6 +429,13 @@ Content:
         render_result.get("variant", "default"),
         visual_plan.get("layout", "center_focus"),
     )
+    rendered_archetype = str(render_result.get("archetype", "")).strip()
+    rendered_variant = str(render_result.get("variant", "")).strip()
+    if rendered_archetype and rendered_variant:
+        recent_variants = archetype_variant_history.setdefault(rendered_archetype, [])
+        if isinstance(recent_variants, list):
+            recent_variants.append(rendered_variant)
+            archetype_variant_history[rendered_archetype] = recent_variants[-3:]
 
     # ── INTEGRITY CHECKPOINT 2: Preprocess → Render Alignment ────────
     # Verify ALL structured content appears in rendered HTML.
