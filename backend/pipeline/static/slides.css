@@ -13,6 +13,10 @@
   --measure-narrow: 56ch;
   --measure-wide: 66ch;
   --measure-tight: 54ch;
+  --accent-strong: #1D4ED8;
+  --surface-contrast: #FFFFFF;
+  --funding-segment-secondary: #94A3B8;
+  --funding-segment-tertiary: #CBD5E1;
 }
 html, body {
   margin: 0;
@@ -987,21 +991,21 @@ html, body {
 }
 
 .ask-funding-segment--secondary {
-  background: #94A3B8;
+  background: var(--funding-segment-secondary);
 }
 
 .ask-funding-segment--tertiary {
-  background: #CBD5E1;
+  background: var(--funding-segment-tertiary);
 }
 
 .ask-cta {
   display: block;
   width: 100%;
   margin-top: 1.5rem;
-  border: 1px solid #1D4ED8;
+  border: 1px solid var(--accent-strong);
   border-radius: 0.5rem;
   background: var(--accent);
-  color: #FFFFFF;
+  color: var(--surface-contrast);
   padding: 1rem 1.25rem;
   font-size: 1rem;
   font-weight: 700;
