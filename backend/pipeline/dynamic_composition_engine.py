@@ -167,7 +167,7 @@ ROLE-TO-LAYOUT BINDING:
 
 Return a JSON object with:
 - "html": The body content of the layout. (Do not wrap in <html> or <body>).
-- "css": Must be an empty string.
+- "css": Optional string. Prefer empty string unless absolutely required.
 
 IMPORTANT: Only return JSON. No markdown backticks or preamble.
 """

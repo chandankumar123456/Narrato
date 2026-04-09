@@ -61,7 +61,7 @@ html, body {
 
 /* Deck rhythm — vary density so slides do not feel cloned */
 .slide-frame[data-rhythm="airy"] {
-  padding: 4rem 4rem 3rem;
+  padding: 4rem 4rem 4rem;
 }
 .slide-frame[data-rhythm="dense"] {
   padding: 3rem 3rem 2rem;
@@ -100,7 +100,7 @@ html, body {
   opacity: 0.95;
 }
 
-/* ── Theme: layered neutral system across deck themes ─────────────── */
+/* ── Theme: layered neutral system across deck themes (intentionally unified) ─ */
 .slide[data-theme="dark_modern"],
 .slide[data-theme="minimal_light"],
 .slide[data-theme="bold_gradient"] {
@@ -307,7 +307,7 @@ html, body {
 /* ── Accents (scarce — one primary bar per region) ─────────────────── */
 .accent-bar {
   width: 4rem;
-  height: 0.25rem;
+  height: 0.35rem;
   border-radius: 0.5rem;
   background: var(--accent-line);
 }
