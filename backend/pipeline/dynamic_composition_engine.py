@@ -417,7 +417,7 @@ Content:
     # Phase 2 & 3: Generation & Validation Loop
     html_content = ""
     css_content = ""
-    slide_theme = _normalize_theme_token(theme_dict.get("background", "minimal_light"))
+    slide_theme = _normalize_theme_token(theme_dict.get("background", ""))
     max_retries = 3
     
     render_input = f"Slide {slide_index + 1}:\nDistilled Content:\n{preprocessing_result}\nTheme: {theme_dict}\nEmotional Tone: {emotional_tone}{visual_plan_block}"

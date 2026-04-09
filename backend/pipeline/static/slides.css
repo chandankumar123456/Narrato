@@ -13,7 +13,6 @@
   --measure-narrow: 56ch;
   --measure-wide: 66ch;
   --measure-tight: 54ch;
-  --accent-strong: #1D4ED8;
   --surface-contrast: #FFFFFF;
   --funding-segment-secondary: #94A3B8;
   --funding-segment-tertiary: #CBD5E1;
@@ -1002,7 +1001,7 @@ html, body {
   display: block;
   width: 100%;
   margin-top: 1.5rem;
-  border: 1px solid var(--accent-strong);
+  border: none;
   border-radius: 0.5rem;
   background: var(--accent);
   color: var(--surface-contrast);
