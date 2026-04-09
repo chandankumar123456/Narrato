@@ -10,6 +10,21 @@ import re
 
 from models.presentation_state import PresentationState
 
+MAX_KICKER_LINES = 2
+MAX_SUPPORT_CARDS = 3
+SAFE_FRAME_ATTR_KEYS = {
+    "data-rhythm",
+    "data-slide-intent",
+    "data-layout",
+    "data-slide-role",
+    "data-hero-emphasis",
+    "data-grid-layout",
+    "data-stats-layout",
+    "data-variant",
+}
+TITLE_SEPARATORS = (": ", " — ", " - ")
+METRIC_PATTERN = r"(\$?\d[\d,.]*(?:\.\d+)?\s?(?:%|x|X|k|K|m|M|b|B|mo|yr|yrs|years?)?)"
+
 
 def flatten_content(content: dict) -> str:
     """Flatten a slide content dict into a human-readable string."""
@@ -87,7 +102,7 @@ def _split_title(primary: str) -> tuple[str, str]:
     text = (primary or "").strip()
     if not text:
         return "Untitled", ""
-    for sep in (": ", " — ", " - "):
+    for sep in TITLE_SEPARATORS:
         if sep in text:
             a, b = text.split(sep, 1)
             return a.strip(), b.strip()
@@ -120,8 +135,10 @@ def _parse_metric(text: str) -> tuple[str, str, str]:
     if not raw:
         return "", "", ""
     # Pattern parts:
-    # \$? optional currency symbol, \d[\d,.]*(?:\.\d+)? numeric core, optional unit suffix.
-    match = re.search(r"(\$?\d[\d,.]*(?:\.\d+)?\s?(?:%|x|X|k|K|m|M|b|B|mo|yr|yrs|years?)?)", raw)
+    #   \$?                    → optional currency symbol
+    #   \d[\d,.]*(?:\.\d+)?    → numeric core with separators/optional decimal
+    #   \s?(%|x|k|m|b|...)     → optional investor-style unit suffix
+    match = re.search(METRIC_PATTERN, raw)
     if not match:
         return "", raw, ""
     value = match.group(1).strip()
@@ -206,7 +223,7 @@ def _infer_archetype(intent: str, role: str, slide_index: int, total_slides: int
 def _render_hero(primary: str, supporting: list[str], slide_index: int) -> tuple[str, str]:
     subtitle = supporting[0] if supporting else ""
     kicker_lines = supporting[1:] if len(supporting) > 1 else []
-    kicker_html = "".join(f'<span class="kicker-line">{_esc(line)}</span>' for line in kicker_lines[:2])
+    kicker_html = "".join(f'<span class="kicker-line">{_esc(line)}</span>' for line in kicker_lines[:MAX_KICKER_LINES])
     support_count = len(supporting)
 
     if _is_long_text(primary) or support_count >= 3:
@@ -222,6 +239,7 @@ def _render_hero(primary: str, supporting: list[str], slide_index: int) -> tuple
         )
         return html_markup, variant
 
+    # Alternate occasional hero statements on odd slides for subtle visual rhythm.
     if support_count <= 1 and slide_index % 2 == 1:
         variant = "statement_center"
         html_markup = (
@@ -404,8 +422,7 @@ def _render_metrics(title: str, primary: str, supporting: list[str], funnel_mode
     if funnel_mode and len(parsed) >= 3:
         tiers = []
         tier_classes = ["tam", "sam", "som"]
-        for idx, (value, label, raw) in enumerate(parsed[:3]):
-            tier = tier_classes[idx]
+        for tier, (value, label, raw) in zip(tier_classes, parsed[:3]):
             tiers.append(
                 f'<article class="stat-funnel-tier stat-funnel-tier--{tier}">'
                 f'<div class="stat-funnel-value">{_esc(value or raw)}</div>'
@@ -494,7 +511,7 @@ def _render_blocks(title: str, primary: str, supporting: list[str], bento: bool,
             f'<h3 class="card-headline">Block {idx + 1}</h3>'
             f'<p class="card-support">{_esc(text)}</p>'
             "</article>"
-            for idx, text in enumerate(supporting[:3])
+            for idx, text in enumerate(supporting[:MAX_SUPPORT_CARDS])
         )
         variant = "bento_asymmetric"
         html_markup = (
@@ -514,10 +531,12 @@ def _render_blocks(title: str, primary: str, supporting: list[str], bento: bool,
     if len(supporting) >= 3 and (density == "high" or slide_index % 2 == 1):
         rows = []
         for idx, text in enumerate(supporting):
+            card_variant = "step-card--focal" if idx == 0 else "step-card--support"
+            num_variant = "step-num--lg" if idx == 0 else "step-num--sm"
             rows.append(
                 '<div class="step-row">'
-                f'<article class="step-card {"step-card--focal" if idx == 0 else "step-card--support"}">'
-                f'<div class="step-num {"step-num--lg" if idx == 0 else "step-num--sm"}">{idx + 1}</div>'
+                f'<article class="step-card {card_variant}">'
+                f'<div class="step-num {num_variant}">{idx + 1}</div>'
                 f'<p class="step-text-lead">{_esc(text)}</p>'
                 "</article></div>"
             )
@@ -537,7 +556,7 @@ def _render_blocks(title: str, primary: str, supporting: list[str], bento: bool,
         f'<h3 class="card-headline">Block {idx + 1}</h3>'
         f'<p class="card-support">{_esc(text)}</p>'
         "</article>"
-        for idx, text in enumerate(supporting[:3])
+        for idx, text in enumerate(supporting[:MAX_SUPPORT_CARDS])
     )
     variant = "grid_balanced"
     html_markup = (
@@ -743,7 +762,11 @@ def compose_slide_markup(
         frame_attrs["data-grid-layout"] = "bento" if variant == "bento_asymmetric" else "grid"
     frame_attrs["data-variant"] = variant
 
-    attrs = " ".join(f'{k}="{_esc(v)}"' for k, v in frame_attrs.items() if v)
+    attrs = " ".join(
+        f'{k}="{_esc(v)}"'
+        for k, v in frame_attrs.items()
+        if v and k in SAFE_FRAME_ATTR_KEYS
+    )
     index_html = f'<div class="slide-deck-index">{slide_index + 1:02d}</div>'
     html_markup = f'<article class="slide-frame" {attrs}>{body}{index_html}</article>'
     return {

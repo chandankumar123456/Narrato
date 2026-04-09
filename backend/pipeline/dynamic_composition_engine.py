@@ -38,27 +38,31 @@ _HTML_WRAPPER = """\
 def _esc(text: str) -> str:
     return html.escape(str(text)) if text else ""
 
+BOLD_GRADIENT_HINTS = ("pink", "magenta", "purple", "violet", "gradient")
+INTEGRITY_PREFIXES = ("TITLE:", "PRIMARY:")
+
 
 def _resolve_theme_token(theme_dict: dict) -> str:
     background = str(theme_dict.get("background", "")).lower()
     primary_color = str(theme_dict.get("primary_color", "")).lower()
     if "light" in background:
         return "minimal_light"
-    if any(k in primary_color for k in ("pink", "magenta", "purple", "violet", "gradient")):
+    if any(k in primary_color for k in BOLD_GRADIENT_HINTS):
         return "bold_gradient"
     return "dark_modern"
 
 
 def _strip_integrity_prefixes(text: str) -> str:
     cleaned = (text or "").strip()
-    changed = True
-    while changed:
-        changed = False
-        for prefix in ("TITLE:", "PRIMARY:"):
+    while True:
+        matched = False
+        for prefix in INTEGRITY_PREFIXES:
             if cleaned.startswith(prefix):
                 cleaned = cleaned.replace(prefix, "", 1).strip()
-                changed = True
-    return cleaned
+                matched = True
+                break
+        if not matched:
+            return cleaned
 
 THEME_GENERATION_PROMPT = """You are a Visual System Architect. Generate a strictly consistent theme structure for the entire presentation.
 
@@ -443,7 +447,7 @@ Content:
                 if not isinstance(elem, str):
                     continue
                 raw = elem.strip()
-                is_heading = raw.startswith(("TITLE:", "PRIMARY:"))
+                is_heading = raw.startswith(INTEGRITY_PREFIXES)
                 txt = _strip_integrity_prefixes(raw)
                 if txt:
                     if is_heading:
