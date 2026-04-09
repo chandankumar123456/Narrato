@@ -563,13 +563,17 @@ def _render_metrics(
     if dominant_metric and _prefer_variant("single_spotlight", avoid_variant):
         value, label, raw = parsed[0] if parsed else ("", "", primary)
         variant = "single_spotlight"
+        kicker_html = "".join(
+            f'<span class="kicker-line">{_esc(s)}</span>'
+            for s in supporting[:MAX_KICKER_LINES]
+        )
         html_markup = (
             '<article class="layout-hero layout-hero--statement">'
             '<div class="layout-hero-inner">'
             f'<p class="slide-label">{_esc(title)}</p>'
             f'<h1 class="slide-title-display"><span class="title-line title-line--primary">{_esc(value or raw)}</span></h1>'
             f'<p class="slide-subtitle-hero">{_esc(label or raw)}</p>'
-            f'<div class="slide-kicker">{"".join(f"<span class=\"kicker-line\">{_esc(s)}</span>" for s in supporting[:MAX_KICKER_LINES])}</div>'
+            f'<div class="slide-kicker">{kicker_html}</div>'    
             "</div></article>"
         )
         return html_markup, variant
@@ -601,13 +605,17 @@ def _render_metrics(
     if (metric_count <= 1 and _is_long_text(primary, word_limit=8, char_limit=60)) and _prefer_variant("single_spotlight", avoid_variant):
         value, label, raw = parsed[0] if parsed else ("", "", primary)
         variant = "single_spotlight"
+        kicker_html = "".join(
+            f'<span class="kicker-line">{_esc(s)}</span>'
+            for s in supporting[:MAX_KICKER_LINES]
+        )
         html_markup = (
             '<article class="layout-hero layout-hero--statement">'
             '<div class="layout-hero-inner">'
             f'<p class="slide-label">{_esc(title)}</p>'
             f'<h1 class="slide-title-display"><span class="title-line title-line--primary">{_esc(value or raw)}</span></h1>'
             f'<p class="slide-subtitle-hero">{_esc(label or raw)}</p>'
-            f'<div class="slide-kicker">{"".join(f"<span class=\"kicker-line\">{_esc(s)}</span>" for s in supporting)}</div>'
+            f'<div class="slide-kicker">{kicker_html}</div>'
             "</div></article>"
         )
         return html_markup, variant
