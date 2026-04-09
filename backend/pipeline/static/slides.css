@@ -5,6 +5,15 @@
 
 /* ── Reset & base ─────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
+:root {
+  --font-heading: "Outfit", "DM Sans", "Segoe UI", sans-serif;
+  --font-body: "DM Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-metric: "Space Grotesk", "Outfit", "DM Sans", sans-serif;
+  --measure-standard: 62ch;
+  --measure-medium: 56ch;
+  --measure-wide: 66ch;
+  --measure-compact: 54ch;
+}
 html, body {
   margin: 0;
   padding: 0;
@@ -12,7 +21,7 @@ html, body {
   height: 1080px;
   overflow: visible;
   -webkit-font-smoothing: antialiased;
-  font-family: "DM Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-body);
   background: #FAFAFA;
 }
 
@@ -119,7 +128,7 @@ html, body {
 /* ── Typography scale (hierarchy) ──────────────────────────────────── */
 .slide-title-display {
   margin: 0;
-  font-family: "Outfit", "DM Sans", "Segoe UI", sans-serif;
+  font-family: var(--font-heading);
   font-size: clamp(3rem, 4vw, 4rem);
   font-weight: 800;
   line-height: 1.08;
@@ -182,7 +191,7 @@ html, body {
 
 .slide-title-section {
   margin: 0;
-  font-family: "Outfit", "DM Sans", "Segoe UI", sans-serif;
+  font-family: var(--font-heading);
   font-size: clamp(3rem, 3.4vw, 3.5rem);
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -211,7 +220,7 @@ html, body {
   font-size: 1rem;
   line-height: 1.5;
   color: var(--text-muted);
-  max-width: 62ch;
+  max-width: var(--measure-standard);
 }
 
 .slide-body-lg {
@@ -219,18 +228,18 @@ html, body {
   line-height: 1.5;
   font-weight: 500;
   color: var(--text-muted);
-  max-width: 56ch;
+  max-width: var(--measure-medium);
 }
 
 .slide-body-sm {
   font-size: 1rem;
   line-height: 1.5;
   color: var(--text-muted);
-  max-width: 66ch;
+  max-width: var(--measure-wide);
 }
 
 .stat-value {
-  font-family: "Space Grotesk", "Outfit", "DM Sans", sans-serif;
+  font-family: var(--font-metric);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--stat-color);
@@ -480,7 +489,7 @@ html, body {
   line-height: 1.6;
   color: var(--text-secondary);
   font-weight: 400;
-  max-width: 54ch;
+  max-width: var(--measure-compact);
 }
 
 .card-body-unified {
