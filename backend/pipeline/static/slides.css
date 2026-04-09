@@ -9,10 +9,10 @@
   --font-heading: "Outfit", "DM Sans", "Segoe UI", sans-serif;
   --font-body: "DM Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-metric: "Space Grotesk", "Outfit", "DM Sans", sans-serif;
-  --measure-standard: 62ch;
-  --measure-medium: 56ch;
+  --measure-body: 62ch;
+  --measure-narrow: 56ch;
   --measure-wide: 66ch;
-  --measure-compact: 54ch;
+  --measure-tight: 54ch;
 }
 html, body {
   margin: 0;
@@ -183,7 +183,7 @@ html, body {
 .slide-subtitle-hero {
   margin: 2rem auto 0;
   max-width: 40rem;
-  font-size: 1rem;
+  font-size: 1.125rem;
   font-weight: 400;
   line-height: 1.5;
   color: var(--text-muted);
@@ -220,19 +220,19 @@ html, body {
   font-size: 1rem;
   line-height: 1.5;
   color: var(--text-muted);
-  max-width: var(--measure-standard);
+  max-width: var(--measure-body);
 }
 
 .slide-body-lg {
-  font-size: 1rem;
-  line-height: 1.5;
+  font-size: 1.0625rem;
+  line-height: 1.55;
   font-weight: 500;
   color: var(--text-muted);
-  max-width: var(--measure-medium);
+  max-width: var(--measure-narrow);
 }
 
 .slide-body-sm {
-  font-size: 1rem;
+  font-size: 0.9375rem;
   line-height: 1.5;
   color: var(--text-muted);
   max-width: var(--measure-wide);
@@ -261,7 +261,7 @@ html, body {
 
 .stat-label-mega {
   margin-top: 1.25rem;
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: 500;
   line-height: 1.5;
   color: var(--text-muted);
@@ -489,7 +489,7 @@ html, body {
   line-height: 1.6;
   color: var(--text-secondary);
   font-weight: 400;
-  max-width: var(--measure-compact);
+  max-width: var(--measure-tight);
 }
 
 .card-body-unified {
