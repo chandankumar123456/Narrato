@@ -459,10 +459,10 @@ Content:
                 if not isinstance(elem, str):
                     continue
                 raw = elem.strip()
-                is_heading = raw.startswith(INTEGRITY_PREFIXES)
+                has_integrity_prefix = raw.startswith(INTEGRITY_PREFIXES)
                 txt = _strip_integrity_prefixes(raw)
                 if txt:
-                    if is_heading:
+                    if has_integrity_prefix:
                         repaired_blocks.append(f'<h3 class="card-headline">{_esc(txt)}</h3>')
                     else:
                         repaired_blocks.append(f'<p class="slide-body">{_esc(txt)}</p>')

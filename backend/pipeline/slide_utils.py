@@ -142,7 +142,9 @@ def _parse_metric(text: str) -> tuple[str, str, str]:
     if not match:
         return "", raw, ""
     value = match.group(1).strip()
-    label = (raw[:match.start()] + raw[match.end():]).strip(" :,-")
+    left = raw[:match.start()].strip()
+    right = raw[match.end():].strip()
+    label = f"{left} {right}".strip(" :,-")
     if not label:
         label = "Key metric"
     return value, label, raw
@@ -280,7 +282,7 @@ def _render_hero(primary: str, supporting: list[str], slide_index: int, avoid_va
         html_markup = (
             '<article class="layout-hero layout-hero--cover">'
             '<div class="layout-hero-inner layout-hero-inner--cover">'
-            f'<div class="slide-kicker"><span class="kicker-line">Slide {slide_index + 1}</span>{kicker_html}</div>'
+            f'<div class="slide-kicker"><span class="kicker-line">Slide {slide_index + 1:02d}</span>{kicker_html}</div>'
             f'{_render_title_display(primary, "slide-title-display--cover")}'
             f'<p class="slide-subtitle-hero slide-subtitle-hero--cover">{_esc(subtitle)}</p>'
             "</div></article>"
@@ -291,7 +293,7 @@ def _render_hero(primary: str, supporting: list[str], slide_index: int, avoid_va
     html_markup = (
         '<article class="layout-hero layout-hero--cover">'
         '<div class="layout-hero-inner layout-hero-inner--cover">'
-        f'<div class="slide-kicker"><span class="kicker-line">Slide {slide_index + 1}</span>{kicker_html}</div>'
+        f'<div class="slide-kicker"><span class="kicker-line">Slide {slide_index + 1:02d}</span>{kicker_html}</div>'
         f'{_render_title_display(primary, "slide-title-display--cover")}'
         f'<p class="slide-subtitle-hero slide-subtitle-hero--cover">{_esc(subtitle)}</p>'
         "</div></article>"
