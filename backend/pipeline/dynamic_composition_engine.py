@@ -37,10 +37,23 @@ _HTML_WRAPPER = """\
 def _esc(text: str) -> str:
     return html.escape(str(text)) if text else ""
 
+
+def _normalize_theme_token(theme_value: str) -> str:
+    raw = (theme_value or "").strip().lower()
+    if raw in {"dark_modern", "minimal_light", "bold_gradient"}:
+        return raw
+    if "bold" in raw or "gradient" in raw:
+        return "bold_gradient"
+    if "dark" in raw:
+        return "dark_modern"
+    if "light" in raw or "minimal" in raw:
+        return "minimal_light"
+    return "minimal_light"
+
 THEME_GENERATION_PROMPT = """You are a Visual System Architect. Generate a strictly consistent theme structure for the entire presentation.
 
 Return a JSON object with EXACTLY these keys:
-- "background": string ("dark" or "light")
+- "background": string ("dark_modern" or "minimal_light" or "bold_gradient")
 - "primary_color": string (hex code or descriptive like "vibrant blue")
 - "font_scale": string (e.g. "massive headers, constrained body")
 - "spacing_scale": string (e.g. "cozy", "spacious", "dense")
@@ -131,11 +144,30 @@ LAYOUT HARD CONSTRAINT:
 - DO NOT break words across lines
 - DO NOT use writing-mode, rotation, or transforms
 
-Context constraints: No images. Only vanilla CSS/HTML. 
+Context constraints: No images. Only vanilla HTML.
+
+SYSTEM DESIGN ENFORCEMENT (MANDATORY):
+- Use Narrato's shared class system so global slide stylesheet controls final design.
+- Do NOT invent custom visual systems, bespoke palettes, or effect-heavy styling.
+- Avoid inline styles except when absolutely necessary for semantic bar widths.
+
+APPROVED STRUCTURE:
+- Root must begin with: <div class="slide-frame"> ... </div>
+- Use these layout families only:
+  - Hero/Hook: layout-hero, layout-hero-inner, slide-title-display, slide-subtitle-hero, stats-grid, stat-cell
+  - Problem vs Solution: layout-split, split-left, split-right, split-visual, mini-card, split-bullet-list
+  - Business Model: layout-grid or layout-stats, card, card--focal, deck-table, deck-bar-track, deck-bar-fill
+  - Ask: layout-hero or layout-grid with ask-card, ask-funding-bar, ask-funding-segment, ask-cta
+
+ROLE-TO-LAYOUT BINDING:
+- hook: dominant centered headline + 3 metric cards in one row.
+- problem/context/tension/solution: split contrast composition (problem side muted/elevated, solution side structured/clean).
+- proof/application/insight: business-model composition with clean table rows and horizontal indicator bars, plus one emphasized metric card.
+- closure: ask composition with centered funding statement, segmented use-of-funds bar, and full-width CTA block.
 
 Return a JSON object with:
 - "html": The body content of the layout. (Do not wrap in <html> or <body>).
-- "css": Any custom CSS you want placed in a <style> block specific to this layout. Use classes.
+- "css": Must be an empty string.
 
 IMPORTANT: Only return JSON. No markdown backticks or preamble.
 """
@@ -385,6 +417,7 @@ Content:
     # Phase 2 & 3: Generation & Validation Loop
     html_content = ""
     css_content = ""
+    slide_theme = _normalize_theme_token(theme_dict.get("background", "minimal_light"))
     max_retries = 3
     
     render_input = f"Slide {slide_index + 1}:\nDistilled Content:\n{preprocessing_result}\nTheme: {theme_dict}\nEmotional Tone: {emotional_tone}{visual_plan_block}"
@@ -400,7 +433,7 @@ Content:
             if not isinstance(render_result, dict):
                 raise ValueError("Render output not JSON dict.")
             html_content = render_result.get("html", "")
-            css_content = render_result.get("css", "")
+            css_content = ""
         except Exception as e:
             logger.error(f"Slide {slide_index + 1}: RENDER attempt {attempt + 1} failed: {e}")
             continue
@@ -469,7 +502,7 @@ Content:
             fix_render = await call_llm_json(RENDER_PROMPT, enforcement_prompt)
             if isinstance(fix_render, dict):
                 fixed_html = fix_render.get("html", "")
-                fixed_css = fix_render.get("css", "")
+                fixed_css = ""
                 # Verify the fix actually worked
                 still_missing = []
                 for elem in missing:
@@ -492,18 +525,18 @@ Content:
         except Exception as fix_err:
             logger.warning("Slide %d: INTEGRITY render fix failed: %s", slide_index + 1, fix_err)
 
-    custom_style = f"<style>{css_content}</style>" if css_content else ""
+    custom_style = ""
 
     final_html = _HTML_WRAPPER.format(
         slides_css=_load_slides_css(),
-        theme=_esc(theme_dict.get('background', 'dark')),
+        theme=_esc(slide_theme),
         custom_style=custom_style,
         inner_html=html_content
     )
     
     design_spec = {
         "slide_index": slide_index,
-        "theme": theme_dict.get('background', 'dark'),
+        "theme": slide_theme,
         "layout": visual_plan.get("layout", "center_focus"),
         "components": {
             "type": preprocessing_result.get("intent", "content"),
@@ -530,10 +563,10 @@ async def run_dynamic_composition_engine(slides: list, state_theme: str, topic: 
     except Exception as e:
         logger.error(f"[dynamic_composition] Theme generation failed: {e}")
         theme_dict = {
-            "background": "dark",
-            "primary_color": "white",
-            "font_scale": "massive headers, tiny constraints",
-            "spacing_scale": "cozy"
+            "background": "minimal_light",
+            "primary_color": "#2563EB",
+            "font_scale": "large headings, readable body",
+            "spacing_scale": "spacious"
         }
     
     logger.info(f"[dynamic_composition] Generating custom designs for {len(slides)} slides with theme={theme_dict.get('primary_color')}...")
