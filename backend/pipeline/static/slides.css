@@ -12,7 +12,7 @@ html, body {
   height: 1080px;
   overflow: visible;
   -webkit-font-smoothing: antialiased;
-  font-family: "DM Sans", "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: "DM Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   background: #FAFAFA;
 }
 
@@ -91,58 +91,14 @@ html, body {
   opacity: 0.95;
 }
 
-/* ── Theme: dark_modern ───────────────────────────────────────────── */
-.slide[data-theme="dark_modern"] {
-  background: #FAFAFA;
-  color: #0F172A;
-  --text-primary: #0F172A;
-  --text-secondary: #0F172A;
-  --text-muted: #64748B;
-  --card-bg: #FFFFFF;
-  --card-border: #E2E8F0;
-  --card-shadow: none;
-  --card-highlight-bg: #F4F6F8;
-  --card-highlight-border: #E2E8F0;
-  --accent: #2563EB;
-  --accent-line: #2563EB;
-  --accent-glow: none;
-  --title-grad: transparent;
-  --stat-color: #2563EB;
-  --step-bg: #2563EB;
-  --step-connector: #CBD5E1;
-  --divider: #E2E8F0;
-  --visual-mesh: #F4F6F8;
-}
-
-/* ── Theme: minimal_light ─────────────────────────────────────────── */
-.slide[data-theme="minimal_light"] {
-  background: #FAFAFA;
-  color: #0F172A;
-  --text-primary: #0F172A;
-  --text-secondary: #0F172A;
-  --text-muted: #64748B;
-  --card-bg: #FFFFFF;
-  --card-border: #E2E8F0;
-  --card-shadow: none;
-  --card-highlight-bg: #F4F6F8;
-  --card-highlight-border: #E2E8F0;
-  --accent: #2563EB;
-  --accent-line: #2563EB;
-  --accent-glow: none;
-  --title-grad: transparent;
-  --stat-color: #2563EB;
-  --step-bg: #2563EB;
-  --step-connector: #CBD5E1;
-  --divider: #E2E8F0;
-  --visual-mesh: #F4F6F8;
-}
-
-/* ── Theme: bold_gradient ─────────────────────────────────────────── */
+/* ── Theme: layered neutral system across deck themes ─────────────── */
+.slide[data-theme="dark_modern"],
+.slide[data-theme="minimal_light"],
 .slide[data-theme="bold_gradient"] {
   background: #FAFAFA;
   color: #0F172A;
   --text-primary: #0F172A;
-  --text-secondary: #0F172A;
+  --text-secondary: #334155;
   --text-muted: #64748B;
   --card-bg: #FFFFFF;
   --card-border: #E2E8F0;
